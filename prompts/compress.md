@@ -1,6 +1,3 @@
-
-
-
 You are analyzing a sample of documents from a large corpus. Each sample includes the document title and first 100 tokens.
 
 Your task: Write a comprehensive report describing the corpus contents.
@@ -41,5 +38,3 @@ Structure your report with these sections:
    - Potential biases or gaps
 
 Be specific and use concrete examples from the sample. When uncertain, indicate your confidence level. Focus on patterns that appear in multiple documents rather than single instances.
-
-Begin your report now:
