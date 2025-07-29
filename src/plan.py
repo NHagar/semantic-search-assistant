@@ -51,4 +51,4 @@ print("Search Plans:")
 for i, plan in enumerate(resp_plans.search_plans, start=1):
     print(f"Plan {i}:\n{plan}\n")
     with open(f"search_plan_{i}.txt", "w") as f:
-        f.write(plan + "\n" + deterministic_blob)
+        f.write(plan + "\n\n" + deterministic_blob)
