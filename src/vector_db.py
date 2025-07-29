@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 import chromadb
+import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
 
 
@@ -11,7 +12,10 @@ class VectorDB:
         self.data_dir = Path(data_dir)
         self.collection_name = collection_name
         self.chroma_client = chromadb.PersistentClient(path="chroma_db")
-        self.embedder = SentenceTransformer("Qwen/Qwen3-Embedding-0.6B")
+        self.embedder = SentenceTransformer(
+            "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
+        )
+        self.embedding_dim = 512
         self.tokenizer = self.embedder.tokenizer
 
         print("Initializing collection...")
@@ -68,22 +72,98 @@ class VectorDB:
 
         return chunks
 
+    def get_existing_filenames(self) -> set[str]:
+        """Get set of filenames that are already in the database."""
+        try:
+            # Get all documents from the collection
+            results = self.collection.get()
+            if not results or not results["metadatas"]:
+                return set()
+
+            filenames = {
+                str(metadata["filename"])
+                for metadata in results["metadatas"]
+                if metadata.get("filename")
+            }
+            return filenames
+        except Exception as e:
+            print(f"Error getting existing filenames: {e}")
+            return set()
+
+    def is_document_processed(self, filename: str) -> bool:
+        """Check if a document with the given filename is already processed."""
+        existing_filenames = self.get_existing_filenames()
+        return filename in existing_filenames
+
+    def get_collection_stats(self) -> Dict[str, Any]:
+        """Get statistics about the collection."""
+        try:
+            results = self.collection.get()
+            if not results or not results["metadatas"]:
+                return {"total_chunks": 0, "unique_files": 0, "filenames": []}
+
+            total_chunks = len(results["metadatas"])
+            unique_files = len(self.get_existing_filenames())
+            filenames = list(self.get_existing_filenames())
+
+            return {
+                "total_chunks": total_chunks,
+                "unique_files": unique_files,
+                "filenames": filenames,
+            }
+        except Exception as e:
+            print(f"Error getting collection stats: {e}")
+            return {"total_chunks": 0, "unique_files": 0, "filenames": []}
+
     def embed_texts(self, texts: List[str]) -> List[float]:
         """Embed a list of texts using the SentenceTransformer."""
-        return self.embedder.encode(
-            texts, batch_size=64, show_progress_bar=True, device="mps"
-        ).tolist()
+        embeddings = self.embedder.encode(
+            texts,
+            convert_to_tensor=True,
+            batch_size=64,
+            show_progress_bar=True,
+            device="mps",
+        )
+        embeddings = F.layer_norm(embeddings, normalized_shape=(embeddings.shape[1],))
+        embeddings = embeddings[:, : self.embedding_dim]
+        embeddings = F.normalize(embeddings, p=2, dim=1)
+        return embeddings.tolist()
 
-    def build_database(self, chunk_size: int = 512, overlap: int = 50):
+    def build_database(
+        self, chunk_size: int = 512, overlap: int = 50, force_rebuild: bool = False
+    ):
         """Build the vector database from txt files."""
         print("Loading txt files...")
         raw_documents = self.load_txt_files()
         print(f"Loaded {len(raw_documents)} documents")
 
+        # Get existing filenames to avoid reprocessing
+        existing_filenames = (
+            self.get_existing_filenames() if not force_rebuild else set()
+        )
+
+        if existing_filenames:
+            print(f"Found {len(existing_filenames)} already processed files")
+
+        documents_to_process = []
         for doc in raw_documents:
+            if doc["filename"] not in existing_filenames:
+                documents_to_process.append(doc)
+            else:
+                print(f"Skipping already processed file: {doc['filename']}")
+
+        if not documents_to_process:
+            print("All documents are already processed!")
+            return
+
+        print(f"Processing {len(documents_to_process)} new documents...")
+
+        for doc in documents_to_process:
             print(f"Processing {doc['filename']}...")
             chunks = self.chunk_text(doc["content"], chunk_size, overlap)
-            embeddings = self.embed_texts(chunks)
+            embeddings = self.embed_texts(
+                [f"search_document: {chunk}" for chunk in chunks]
+            )
             self.collection.add(
                 ids=[str(uuid.uuid4()) for _ in range(len(chunks))],
                 documents=chunks,
@@ -100,13 +180,16 @@ class VectorDB:
                 embeddings=embeddings,
             )
 
-        print("Database built successfully")
+        print(
+            f"Database updated successfully! Processed {len(documents_to_process)} new documents."
+        )
 
     def semantic_search(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """Perform semantic search using chroma."""
-        query = f"query: {query}"
+        query = f"search_query: {query}"
+        query_embedding = self.embed_texts([query])[0]
         results = self.collection.query(
-            query_texts=[query],
+            query_embeddings=[query_embedding],
             n_results=n_results,
         )
         if not results or not results["documents"]:
@@ -154,7 +237,21 @@ class VectorDB:
 def main():
     """Example usage of the VectorDB class."""
     db = VectorDB()
+
+    # Show current database stats
+    stats = db.get_collection_stats()
+    print(
+        f"Current database: {stats['total_chunks']} chunks from {stats['unique_files']} files"
+    )
+
+    # Build/update database
     db.build_database(chunk_size=1024, overlap=20)
+
+    # Show updated stats
+    stats = db.get_collection_stats()
+    print(
+        f"Updated database: {stats['total_chunks']} chunks from {stats['unique_files']} files"
+    )
 
     while True:
         query = input("\nEnter your search query (or 'quit' to exit): ").strip()
