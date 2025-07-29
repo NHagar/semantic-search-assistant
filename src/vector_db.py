@@ -48,7 +48,7 @@ class VectorDB:
     ) -> List[str]:
         """Split text into overlapping chunks based on tokens."""
         tokens = self.tokenizer.encode(text)
-        
+
         if len(tokens) <= chunk_size:
             return [text]
 
@@ -60,10 +60,10 @@ class VectorDB:
             chunk_tokens = tokens[start:end]
             chunk_text = self.tokenizer.decode(chunk_tokens)
             chunks.append(chunk_text)
-            
+
             if end >= len(tokens):
                 break
-                
+
             start = end - overlap
 
         return chunks
@@ -117,7 +117,9 @@ class VectorDB:
         results_distances = results["distances"][0] if results["distances"] else []
 
         output = []
-        for text, metadata, distance in zip(results_text, results_metadata, results_distances):
+        for text, metadata, distance in zip(
+            results_text, results_metadata, results_distances
+        ):
             similarity = 1 - distance  # Convert distance to similarity
             output.append(
                 {
@@ -152,7 +154,7 @@ class VectorDB:
 def main():
     """Example usage of the VectorDB class."""
     db = VectorDB()
-    db.build_database(chunk_size=512)
+    db.build_database(chunk_size=1024, overlap=20)
 
     while True:
         query = input("\nEnter your search query (or 'quit' to exit): ").strip()
