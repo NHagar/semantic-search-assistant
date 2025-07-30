@@ -234,6 +234,12 @@ class SearchAgent:
         Returns:
             The generated report in the specified output structure
         """
+        # Initialize debug log for tool calls
+        debug_log = []
+        debug_log.append("=== SEARCH AGENT DEBUG LOG ===")
+        debug_log.append(f"Model: {model}")
+        debug_log.append(f"Max iterations: 15")
+        debug_log.append("")
         system_prompt = """You are a research assistant executing a specific search plan. Your task is to:
 
 1. Use the search_documents tool to systematically search for information related to the objective
@@ -272,6 +278,11 @@ SEARCH PLAN DETAILS:
 
                 assistant_message = response.choices[0].message
 
+                # Log the full assistant response for debugging
+                debug_log.append(f"--- Iteration {iteration + 1}: Assistant Response ---")
+                debug_log.append(f"Content: {assistant_message.content}")
+                debug_log.append("")
+
                 # Handle tool calls - check both OpenAI format and qwen 3 format
                 tool_calls_to_execute = []
                 
@@ -279,6 +290,7 @@ SEARCH PLAN DETAILS:
                     # OpenAI format tool calls
                     tool_calls_to_execute = assistant_message.tool_calls
                     print(f"    Making {len(tool_calls_to_execute)} OpenAI tool call(s)")
+                    debug_log.append(f"Tool calls detected: {len(tool_calls_to_execute)} (OpenAI format)")
                     
                     # Add assistant message with tool calls
                     messages.append({
@@ -300,6 +312,7 @@ SEARCH PLAN DETAILS:
                     # qwen 3 format tool calls
                     tool_calls_to_execute = self.parse_qwen_tool_calls(assistant_message.content)
                     print(f"    Making {len(tool_calls_to_execute)} qwen tool call(s)")
+                    debug_log.append(f"Tool calls detected: {len(tool_calls_to_execute)} (qwen format)")
                     
                     # Add assistant message for qwen format
                     messages.append({
@@ -308,8 +321,19 @@ SEARCH PLAN DETAILS:
                     })
 
                 if tool_calls_to_execute:
-                    for tool_call in tool_calls_to_execute:
+                    for i, tool_call in enumerate(tool_calls_to_execute, 1):
+                        # Log tool call input
+                        debug_log.append(f"Tool Call {i}:")
+                        debug_log.append(f"  Function: {tool_call.function.name}")
+                        debug_log.append(f"  Arguments: {tool_call.function.arguments}")
+                        
+                        # Execute tool call
                         tool_result = self.execute_tool_call(tool_call)
+                        
+                        # Log tool call output
+                        debug_log.append(f"  Result: {tool_result}")
+                        debug_log.append("")
+                        
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
@@ -319,19 +343,37 @@ SEARCH PLAN DETAILS:
                 else:
                     # No more tool calls, return the final response
                     print("  Research complete, generating final report")
-                    return assistant_message.content or "No response generated"
+                    
+                    final_content = assistant_message.content or "No response generated"
+                    debug_section = "\n".join(debug_log)
+                    
+                    return f"{final_content}\n\n{debug_section}"
 
             # If we hit max iterations, ask for final report
             print("  Max iterations reached, requesting final report")
+            debug_log.append("--- Max Iterations Reached ---")
+            debug_log.append("Requesting final report...")
+            debug_log.append("")
+            
             final_response = self.client.chat.completions.create(
                 model=model, 
                 messages=messages + [{"role": "user", "content": "Please provide your final report now in the required output structure."}]
             )
             
-            return final_response.choices[0].message.content or "No final response generated"
+            debug_log.append("=== FINAL REPORT ===")
+            debug_log.append("")
+            
+            final_content = final_response.choices[0].message.content or "No final response generated"
+            debug_section = "\n".join(debug_log)
+            
+            return f"{final_content}\n\n{debug_section}"
 
         except Exception as e:
-            return f"Error executing search plan: {str(e)}"
+            debug_log.append("--- ERROR OCCURRED ---")
+            debug_log.append(f"Error: {str(e)}")
+            debug_section = "\n".join(debug_log)
+            
+            return f"Error executing search plan: {str(e)}\n\n{debug_section}"
 
     def chat(self, user_message: str, model: str = "google/gemma-3-12b") -> str:
         """
