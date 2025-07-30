@@ -175,6 +175,36 @@ class SearchAgent:
         """Get list of available tools for function calling."""
         return [self.search_tool.get_tool_schema()]
 
+    def parse_qwen_tool_calls(self, content: str) -> List[Dict[str, Any]]:
+        """Parse qwen 3's tool call format from content."""
+        tool_calls = []
+        
+        # Find all <tool_call> blocks
+        pattern = r'<tool_call>(.*?)</tool_call>'
+        matches = re.findall(pattern, content, re.DOTALL)
+        
+        for i, match in enumerate(matches):
+            try:
+                # Parse the JSON inside the tool_call tags
+                tool_data = json.loads(match.strip())
+                
+                # Create a tool call object compatible with our execute method
+                tool_call = type('ToolCall', (), {
+                    'id': f'qwen_call_{i}',
+                    'function': type('Function', (), {
+                        'name': tool_data.get('name', ''),
+                        'arguments': json.dumps(tool_data.get('arguments', {}))
+                    })()
+                })()
+                
+                tool_calls.append(tool_call)
+                
+            except json.JSONDecodeError:
+                # Skip invalid JSON
+                continue
+                
+        return tool_calls
+
     def execute_tool_call(self, tool_call) -> str:
         """Execute a tool call and return the result."""
         if tool_call.function.name == "search_documents":
@@ -193,7 +223,7 @@ class SearchAgent:
                 }
             )
     
-    def execute_search_plan(self, search_plan: SearchPlan, model: str = "google/gemma-3-12b") -> str:
+    def execute_search_plan(self, search_plan: str, model: str = "google/gemma-3-12b") -> str:
         """
         Execute a search plan autonomously and generate a report.
 
@@ -204,19 +234,11 @@ class SearchAgent:
         Returns:
             The generated report in the specified output structure
         """
-        system_prompt = f"""You are a research assistant executing a specific search plan. Your task is to:
+        system_prompt = """You are a research assistant executing a specific search plan. Your task is to:
 
 1. Use the search_documents tool to systematically search for information related to the objective
 2. Execute searches based on the suggested queries and any additional queries you determine are relevant
 3. Synthesize the findings into a comprehensive report
-
-SEARCH PLAN DETAILS:
-Objective: {search_plan.objective}
-
-Sub-objectives:
-{chr(10).join(search_plan.sub_objectives)}
-
-Suggested queries: {', '.join(search_plan.suggested_queries)}
 
 INSTRUCTIONS:
 - Start by searching with the suggested queries
@@ -224,16 +246,14 @@ INSTRUCTIONS:
 - Gather comprehensive information to address all sub-objectives
 - Synthesize findings into the required output structure
 
-REQUIRED OUTPUT STRUCTURE:
-- Objective: [Original search objective]
-- Executive summary: [3-5 sentence summary of findings]
-- Details: [Sections describing key details, each with their own header]
+Begin by conducting your searches, then provide the final report in the exact structure specified above.
 
-Begin by conducting your searches, then provide the final report in the exact structure specified above."""
+SEARCH PLAN DETAILS:
+"""
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Execute the search plan for: {search_plan.objective}"}
+            {"role": "user", "content": search_plan}
         ]
 
         tools = self.get_available_tools()
@@ -252,9 +272,13 @@ Begin by conducting your searches, then provide the final report in the exact st
 
                 assistant_message = response.choices[0].message
 
-                # Handle tool calls
+                # Handle tool calls - check both OpenAI format and qwen 3 format
+                tool_calls_to_execute = []
+                
                 if assistant_message.tool_calls:
-                    print(f"    Making {len(assistant_message.tool_calls)} tool call(s)")
+                    # OpenAI format tool calls
+                    tool_calls_to_execute = assistant_message.tool_calls
+                    print(f"    Making {len(tool_calls_to_execute)} OpenAI tool call(s)")
                     
                     # Add assistant message with tool calls
                     messages.append({
@@ -272,8 +296,19 @@ Begin by conducting your searches, then provide the final report in the exact st
                             for tc in assistant_message.tool_calls
                         ]
                     })
+                elif assistant_message.content and "<tool_call>" in assistant_message.content:
+                    # qwen 3 format tool calls
+                    tool_calls_to_execute = self.parse_qwen_tool_calls(assistant_message.content)
+                    print(f"    Making {len(tool_calls_to_execute)} qwen tool call(s)")
+                    
+                    # Add assistant message for qwen format
+                    messages.append({
+                        "role": "assistant", 
+                        "content": assistant_message.content
+                    })
 
-                    for tool_call in assistant_message.tool_calls:
+                if tool_calls_to_execute:
+                    for tool_call in tool_calls_to_execute:
                         tool_result = self.execute_tool_call(tool_call)
                         messages.append({
                             "role": "tool",
@@ -335,11 +370,23 @@ Guidelines:
 
             assistant_message = response.choices[0].message
 
-            # Handle tool calls
+            # Handle tool calls - check both OpenAI format and qwen 3 format
+            tool_calls_to_execute = []
+            
             if assistant_message.tool_calls:
+                # OpenAI format tool calls
+                tool_calls_to_execute = assistant_message.tool_calls
                 messages.append(assistant_message)
+            elif assistant_message.content and "<tool_call>" in assistant_message.content:
+                # qwen 3 format tool calls
+                tool_calls_to_execute = self.parse_qwen_tool_calls(assistant_message.content)
+                messages.append({
+                    "role": "assistant",
+                    "content": assistant_message.content
+                })
 
-                for tool_call in assistant_message.tool_calls:
+            if tool_calls_to_execute:
+                for tool_call in tool_calls_to_execute:
                     tool_result = self.execute_tool_call(tool_call)
                     messages.append(
                         {
@@ -376,13 +423,16 @@ def execute_all_search_plans():
         try:
             # Parse the search plan
             search_plan = SearchPlan(plan_file)
+            with open(plan_file, 'r') as f:
+                search_plan_text = f.read()
+        
             print(f"Objective: {search_plan.objective}")
             print(f"Sub-objectives: {len(search_plan.sub_objectives)}")
             print(f"Suggested queries: {len(search_plan.suggested_queries)}")
             
             # Execute the search plan
             print("\nExecuting search plan...")
-            report = agent.execute_search_plan(search_plan)
+            report = agent.execute_search_plan(search_plan_text, model="qwen/qwen3-14b")
             
             # Save the report
             report_filename = f"report_{plan_file.stem}.txt"
