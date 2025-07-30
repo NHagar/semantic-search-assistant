@@ -11,6 +11,8 @@ from vector_db import VectorDB
 search_plans = list(Path(".").glob("search_plan_*.txt"))
 client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm_studio")
 db = VectorDB()
+with open("prompts/search.md", "r") as f:
+    search_prompt = f.read()
 
 
 class VectorSearchTool:
@@ -240,22 +242,7 @@ class SearchAgent:
         debug_log.append(f"Model: {model}")
         debug_log.append(f"Max iterations: 15")
         debug_log.append("")
-        system_prompt = """You are a research assistant executing a specific search plan. Your task is to:
-
-1. Use the search_documents tool to systematically search for information related to the objective
-2. Execute searches based on the suggested queries and any additional queries you determine are relevant
-3. Synthesize the findings into a comprehensive report
-
-INSTRUCTIONS:
-- Start by searching with the suggested queries
-- Based on initial results, conduct additional targeted searches as needed
-- Gather comprehensive information to address all sub-objectives
-- Synthesize findings into the required output structure
-
-Begin by conducting your searches, then provide the final report in the exact structure specified above.
-
-SEARCH PLAN DETAILS:
-"""
+        system_prompt = search_prompt
 
         messages = [
             {"role": "system", "content": system_prompt},
