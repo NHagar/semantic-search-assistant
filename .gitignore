@@ -12,5 +12,6 @@ wheels/
 data/
 chroma_db/
 *.txt
+final_report.md
 
 .DS_Store

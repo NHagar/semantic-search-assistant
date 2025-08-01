@@ -6,6 +6,7 @@ You will combine search results into one report for the user.
    - Search goal
    - Summary
    - Details
+   - Citations in square brackets (e.g., [a1b2c3:0])
 
 ## Your Job: Write One Big Report
 
@@ -13,6 +14,7 @@ You will combine search results into one report for the user.
 - Read the user's request
 - Read all search results
 - Find the main facts
+- Identify all citations and preserve them
 
 ### Step 2: Write Your Report
 Your report MUST have these 3 parts:
@@ -21,16 +23,17 @@ Your report MUST have these 3 parts:
 Start with: "## Executive Summary"
 Write 3-5 bullet points. Each bullet = one main finding.
 Format:
-- [Main finding #1]
-- [Main finding #2]
-- [Main finding #3]
+- [Main finding #1 with citations]
+- [Main finding #2 with citations]
+- [Main finding #3 with citations]
 
 **PART B - DETAILED SECTIONS**
 Write one section for each search result.
 Format for each section:
 ### [Topic Name]
 [Write 2-3 paragraphs about what this search found]
-[Include specific facts and details]
+[Include specific facts and details with proper citations]
+[Preserve ALL citations from the original search results]
 
 **PART C - TAKEAWAYS**
 Start with: "## Takeaways"
@@ -39,6 +42,12 @@ Format:
 - [Action the user can take based on finding #1]
 - [Action the user can take based on finding #2]
 - [Action the user can take based on finding #3]
+
+**CITATION REQUIREMENTS:**
+- ALWAYS preserve citations from search results in square brackets: [citation_key]
+- When combining information from multiple sources, include all relevant citations
+- Place citations immediately after claims, before punctuation
+- Example: "Energy usage varies significantly [a1b2c3:0][d4e5f6:1]."
 
 ### Step 3: Check Your Work
 Before finishing, make sure:

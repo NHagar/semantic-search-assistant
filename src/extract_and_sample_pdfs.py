@@ -41,17 +41,19 @@ def sample_tokens(text, n_tokens, encoding_name="cl100k_base"):
     return encoding.decode(sampled_tokens)
 
 
-def process_pdfs_and_sample(data_dir, n_tokens, token_budget=None, save_txt_files=True, verbose=True):
+def process_pdfs_and_sample(
+    data_dir, n_tokens, token_budget=None, save_txt_files=True, verbose=True
+):
     """
     Process PDFs and return sampled text.
-    
+
     Args:
         data_dir: Path to directory containing PDF files
         n_tokens: Number of tokens to sample from each document
         token_budget: Optional total token budget limit
         save_txt_files: Whether to save extracted text as .txt files
         verbose: Whether to print progress messages
-    
+
     Returns:
         str: Combined sampled text from all PDFs
     """
@@ -125,12 +127,12 @@ def process_pdfs_and_sample(data_dir, n_tokens, token_budget=None, save_txt_file
     combined_text = f"# Sampled Text from {len(results)} PDF Files\n"
     for result in results:
         combined_text += f"## FILE: {result['filename']}\n"
-        combined_text += "## " "\n"
+        combined_text += "## \n"
         combined_text += result["sampled_text"]
         combined_text += "\n##" + "\n\n"
 
     if verbose:
-        print(f"\nProcessing complete!")
+        print("\nProcessing complete!")
         print(f"Processed {len(results)} files")
         print(f"Total tokens used: {total_tokens_used}")
 
@@ -172,7 +174,7 @@ def main():
         n_tokens=args.n_tokens,
         token_budget=args.token_budget,
         save_txt_files=True,
-        verbose=True
+        verbose=True,
     )
 
     if combined_text:

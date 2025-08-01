@@ -1,4 +1,4 @@
-import uuid
+import hashlib
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -164,14 +164,19 @@ class VectorDB:
             embeddings = self.embed_texts(
                 [f"search_document: {chunk}" for chunk in chunks]
             )
+            # Create compact citation keys using filename hash + chunk number
+            filename_hash = hashlib.md5(doc["filename"].encode()).hexdigest()[:6]
+            citation_keys = [f"{filename_hash}:{i}" for i in range(len(chunks))]
+
             self.collection.add(
-                ids=[str(uuid.uuid4()) for _ in range(len(chunks))],
+                ids=citation_keys,
                 documents=chunks,
                 metadatas=[
                     {
                         "filename": doc["filename"],
                         "path": doc["path"],
                         "chunk_id": i,
+                        "citation_key": citation_keys[i],
                         "content": chunk,
                         "original_length": doc["length"],
                     }
@@ -208,6 +213,9 @@ class VectorDB:
                 {
                     "filename": metadata["filename"],
                     "chunk_id": metadata["chunk_id"],
+                    "citation_key": metadata.get(
+                        "citation_key", f"unknown:{metadata['chunk_id']}"
+                    ),
                     "content": text,
                     "similarity": similarity,
                 }

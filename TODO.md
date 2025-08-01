@@ -1,0 +1,4 @@
+- Citations
+- e2e test
+- Code cleanup
+- Testable prototype

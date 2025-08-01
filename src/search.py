@@ -119,23 +119,23 @@ class VectorSearchTool:
 
 class SearchPlan:
     """Represents a search plan with objective and queries."""
-    
+
     def __init__(self, file_path: Path):
         self.file_path = file_path
         self.content = file_path.read_text()
         self.parse_plan()
-    
+
     def parse_plan(self):
         """Parse the search plan file to extract components."""
-        lines = self.content.split('\n')
-        
+        lines = self.content.split("\n")
+
         # Extract objective
         self.objective = ""
         for line in lines:
             if line.startswith("OBJECTIVE:"):
                 self.objective = line.replace("OBJECTIVE:", "").strip()
                 break
-        
+
         # Extract sub-objectives
         self.sub_objectives = []
         in_sub_objectives = False
@@ -148,7 +148,7 @@ class SearchPlan:
                 continue
             elif in_sub_objectives and line.strip() and line[0].isdigit():
                 self.sub_objectives.append(line.strip())
-        
+
         # Extract suggested queries
         self.suggested_queries = []
         for line in lines:
@@ -180,31 +180,39 @@ class SearchAgent:
     def parse_qwen_tool_calls(self, content: str) -> List[Dict[str, Any]]:
         """Parse qwen 3's tool call format from content."""
         tool_calls = []
-        
+
         # Find all <tool_call> blocks
-        pattern = r'<tool_call>(.*?)</tool_call>'
+        pattern = r"<tool_call>(.*?)</tool_call>"
         matches = re.findall(pattern, content, re.DOTALL)
-        
+
         for i, match in enumerate(matches):
             try:
                 # Parse the JSON inside the tool_call tags
                 tool_data = json.loads(match.strip())
-                
+
                 # Create a tool call object compatible with our execute method
-                tool_call = type('ToolCall', (), {
-                    'id': f'qwen_call_{i}',
-                    'function': type('Function', (), {
-                        'name': tool_data.get('name', ''),
-                        'arguments': json.dumps(tool_data.get('arguments', {}))
-                    })()
-                })()
-                
+                tool_call = type(
+                    "ToolCall",
+                    (),
+                    {
+                        "id": f"qwen_call_{i}",
+                        "function": type(
+                            "Function",
+                            (),
+                            {
+                                "name": tool_data.get("name", ""),
+                                "arguments": json.dumps(tool_data.get("arguments", {})),
+                            },
+                        )(),
+                    },
+                )()
+
                 tool_calls.append(tool_call)
-                
+
             except json.JSONDecodeError:
                 # Skip invalid JSON
                 continue
-                
+
         return tool_calls
 
     def execute_tool_call(self, tool_call) -> str:
@@ -224,8 +232,10 @@ class SearchAgent:
                     "message": f"Unknown tool: {tool_call.function.name}",
                 }
             )
-    
-    def execute_search_plan(self, search_plan: str, model: str = "google/gemma-3-12b") -> str:
+
+    def execute_search_plan(
+        self, search_plan: str, model: str = "google/gemma-3-12b"
+    ) -> str:
         """
         Execute a search plan autonomously and generate a report.
 
@@ -240,13 +250,13 @@ class SearchAgent:
         debug_log = []
         debug_log.append("=== SEARCH AGENT DEBUG LOG ===")
         debug_log.append(f"Model: {model}")
-        debug_log.append(f"Max iterations: 15")
+        debug_log.append("Max iterations: 15")
         debug_log.append("")
         system_prompt = search_prompt
 
         messages = [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": search_plan}
+            {"role": "user", "content": search_plan},
         ]
 
         tools = self.get_available_tools()
@@ -255,57 +265,68 @@ class SearchAgent:
         try:
             for iteration in range(max_iterations):
                 print(f"  Iteration {iteration + 1}/{max_iterations}")
-                
+
                 response = self.client.chat.completions.create(
-                    model=model, 
-                    messages=messages, 
-                    tools=tools, 
-                    tool_choice="auto"
+                    model=model, messages=messages, tools=tools, tool_choice="auto"
                 )
 
                 assistant_message = response.choices[0].message
 
                 # Log the full assistant response for debugging
-                debug_log.append(f"--- Iteration {iteration + 1}: Assistant Response ---")
+                debug_log.append(
+                    f"--- Iteration {iteration + 1}: Assistant Response ---"
+                )
                 debug_log.append(f"Content: {assistant_message.content}")
                 debug_log.append("")
 
                 # Handle tool calls - check both OpenAI format and qwen 3 format
                 tool_calls_to_execute = []
-                
+
                 if assistant_message.tool_calls:
                     # OpenAI format tool calls
                     tool_calls_to_execute = assistant_message.tool_calls
-                    print(f"    Making {len(tool_calls_to_execute)} OpenAI tool call(s)")
-                    debug_log.append(f"Tool calls detected: {len(tool_calls_to_execute)} (OpenAI format)")
-                    
+                    print(
+                        f"    Making {len(tool_calls_to_execute)} OpenAI tool call(s)"
+                    )
+                    debug_log.append(
+                        f"Tool calls detected: {len(tool_calls_to_execute)} (OpenAI format)"
+                    )
+
                     # Add assistant message with tool calls
-                    messages.append({
-                        "role": "assistant",
-                        "content": assistant_message.content,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": tc.type,
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": assistant_message.content,
+                            "tool_calls": [
+                                {
+                                    "id": tc.id,
+                                    "type": tc.type,
+                                    "function": {
+                                        "name": tc.function.name,
+                                        "arguments": tc.function.arguments,
+                                    },
                                 }
-                            }
-                            for tc in assistant_message.tool_calls
-                        ]
-                    })
-                elif assistant_message.content and "<tool_call>" in assistant_message.content:
+                                for tc in assistant_message.tool_calls
+                            ],
+                        }
+                    )
+                elif (
+                    assistant_message.content
+                    and "<tool_call>" in assistant_message.content
+                ):
                     # qwen 3 format tool calls
-                    tool_calls_to_execute = self.parse_qwen_tool_calls(assistant_message.content)
+                    tool_calls_to_execute = self.parse_qwen_tool_calls(
+                        assistant_message.content
+                    )
                     print(f"    Making {len(tool_calls_to_execute)} qwen tool call(s)")
-                    debug_log.append(f"Tool calls detected: {len(tool_calls_to_execute)} (qwen format)")
-                    
+                    debug_log.append(
+                        f"Tool calls detected: {len(tool_calls_to_execute)} (qwen format)"
+                    )
+
                     # Add assistant message for qwen format
-                    messages.append({
-                        "role": "assistant", 
-                        "content": assistant_message.content
-                    })
+                    messages.append(
+                        {"role": "assistant", "content": assistant_message.content}
+                    )
 
                 if tool_calls_to_execute:
                     for i, tool_call in enumerate(tool_calls_to_execute, 1):
@@ -313,27 +334,29 @@ class SearchAgent:
                         debug_log.append(f"Tool Call {i}:")
                         debug_log.append(f"  Function: {tool_call.function.name}")
                         debug_log.append(f"  Arguments: {tool_call.function.arguments}")
-                        
+
                         # Execute tool call
                         tool_result = self.execute_tool_call(tool_call)
-                        
+
                         # Log tool call output
                         debug_log.append(f"  Result: {tool_result}")
                         debug_log.append("")
-                        
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tool_call.id,
-                            "content": tool_result,
-                        })
+
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": tool_result,
+                            }
+                        )
 
                 else:
                     # No more tool calls, return the final response
                     print("  Research complete, generating final report")
-                    
+
                     final_content = assistant_message.content or "No response generated"
                     debug_section = "\n".join(debug_log)
-                    
+
                     return f"{final_content}\n\n{debug_section}"
 
             # If we hit max iterations, ask for final report
@@ -341,25 +364,34 @@ class SearchAgent:
             debug_log.append("--- Max Iterations Reached ---")
             debug_log.append("Requesting final report...")
             debug_log.append("")
-            
+
             final_response = self.client.chat.completions.create(
-                model=model, 
-                messages=messages + [{"role": "user", "content": "Please provide your final report now in the required output structure."}]
+                model=model,
+                messages=messages
+                + [
+                    {
+                        "role": "user",
+                        "content": "Please provide your final report now in the required output structure.",
+                    }
+                ],
             )
-            
+
             debug_log.append("=== FINAL REPORT ===")
             debug_log.append("")
-            
-            final_content = final_response.choices[0].message.content or "No final response generated"
+
+            final_content = (
+                final_response.choices[0].message.content
+                or "No final response generated"
+            )
             debug_section = "\n".join(debug_log)
-            
+
             return f"{final_content}\n\n{debug_section}"
 
         except Exception as e:
             debug_log.append("--- ERROR OCCURRED ---")
             debug_log.append(f"Error: {str(e)}")
             debug_section = "\n".join(debug_log)
-            
+
             return f"Error executing search plan: {str(e)}\n\n{debug_section}"
 
     def chat(self, user_message: str, model: str = "google/gemma-3-12b") -> str:
@@ -401,18 +433,21 @@ Guidelines:
 
             # Handle tool calls - check both OpenAI format and qwen 3 format
             tool_calls_to_execute = []
-            
+
             if assistant_message.tool_calls:
                 # OpenAI format tool calls
                 tool_calls_to_execute = assistant_message.tool_calls
                 messages.append(assistant_message)
-            elif assistant_message.content and "<tool_call>" in assistant_message.content:
+            elif (
+                assistant_message.content and "<tool_call>" in assistant_message.content
+            ):
                 # qwen 3 format tool calls
-                tool_calls_to_execute = self.parse_qwen_tool_calls(assistant_message.content)
-                messages.append({
-                    "role": "assistant",
-                    "content": assistant_message.content
-                })
+                tool_calls_to_execute = self.parse_qwen_tool_calls(
+                    assistant_message.content
+                )
+                messages.append(
+                    {"role": "assistant", "content": assistant_message.content}
+                )
 
             if tool_calls_to_execute:
                 for tool_call in tool_calls_to_execute:
@@ -441,39 +476,40 @@ Guidelines:
 def execute_all_search_plans():
     """Execute all available search plans and save reports."""
     agent = SearchAgent(db, client)
-    
+
     print(f"Found {len(search_plans)} search plan files")
-    
+
     for plan_file in search_plans:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Executing search plan: {plan_file.name}")
-        print(f"{'='*60}")
-        
+        print(f"{'=' * 60}")
+
         try:
             # Parse the search plan
             search_plan = SearchPlan(plan_file)
-            with open(plan_file, 'r') as f:
+            with open(plan_file, "r") as f:
                 search_plan_text = f.read()
-        
+
             print(f"Objective: {search_plan.objective}")
             print(f"Sub-objectives: {len(search_plan.sub_objectives)}")
             print(f"Suggested queries: {len(search_plan.suggested_queries)}")
-            
+
             # Execute the search plan
             print("\nExecuting search plan...")
             report = agent.execute_search_plan(search_plan_text, model="qwen/qwen3-14b")
-            
+
             # Save the report
             report_filename = f"report_{plan_file.stem}.txt"
-            with open(report_filename, 'w') as f:
+            with open(report_filename, "w") as f:
                 f.write(report)
-            
+
             print(f"\nReport saved to: {report_filename}")
             print(f"Report length: {len(report)} characters")
-            
+
         except Exception as e:
             print(f"Error processing {plan_file.name}: {str(e)}")
             continue
+
 
 def main():
     """Execute all search plans autonomously."""
