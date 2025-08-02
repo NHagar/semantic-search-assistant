@@ -35,7 +35,7 @@ user_input = f"""<report>
 """
 
 response = client.beta.chat.completions.parse(
-    model="google/gemma-3-12b",
+    model="qwen/qwen3-14b",
     messages=[
         {"role": "system", "content": prompt},
         {"role": "user", "content": user_input},

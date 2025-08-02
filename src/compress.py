@@ -13,7 +13,7 @@ compressed_docs = process_pdfs_and_sample(
 )
 
 response = client.chat.completions.create(
-    model="google/gemma-3-12b",
+    model="qwen/qwen3-14b",
     messages=[
         {"role": "system", "content": prompt},
         {"role": "user", "content": compressed_docs},

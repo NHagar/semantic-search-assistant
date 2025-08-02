@@ -234,7 +234,7 @@ class SearchAgent:
             )
 
     def execute_search_plan(
-        self, search_plan: str, model: str = "google/gemma-3-12b"
+        self, search_plan: str, model: str = "qwen/qwen3-14b"
     ) -> str:
         """
         Execute a search plan autonomously and generate a report.
@@ -394,7 +394,7 @@ class SearchAgent:
 
             return f"Error executing search plan: {str(e)}\n\n{debug_section}"
 
-    def chat(self, user_message: str, model: str = "google/gemma-3-12b") -> str:
+    def chat(self, user_message: str, model: str = "qwen/qwen3-14b") -> str:
         """
         Chat with the agent, which can use tools to search documents.
 
