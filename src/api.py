@@ -18,7 +18,7 @@ from .vector_db import VectorDB
 
 
 class SearchPlans(BaseModel):
-    search_plans: list[str]
+    search_plans: List[str]
 
 
 class Evaluation(BaseModel):
