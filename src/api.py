@@ -262,7 +262,7 @@ class SemanticSearchAPI:
         )
 
         if len(plans) != len(reports):
-            raise ValueError("Number of plans and reports do not match.")
+            raise ValueError(f"Number of plans ({len(plans)}) and reports ({len(reports)}) do not match.")
 
         passed_reports = []
 
