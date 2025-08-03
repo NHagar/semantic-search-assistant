@@ -1,6 +1,6 @@
 from openai import OpenAI
 
-from extract_and_sample_pdfs import process_pdfs_and_sample
+from .extract_and_sample_pdfs import process_pdfs_and_sample
 
 client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm_studio")
 
