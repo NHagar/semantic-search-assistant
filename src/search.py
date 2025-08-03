@@ -5,7 +5,7 @@ from typing import Any, Dict, List
 
 from openai import OpenAI
 
-from vector_db import VectorDB
+from .vector_db import VectorDB
 
 # Initialize components
 search_plans = list(Path(".").glob("search_plan_*.txt"))
