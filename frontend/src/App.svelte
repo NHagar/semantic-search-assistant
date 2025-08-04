@@ -1,22 +1,22 @@
 <script>
-  import { onMount } from 'svelte';
-  import { 
-    currentStep, 
-    steps, 
-    loading, 
-    error, 
-    setError 
-  } from './lib/stores.js';
-  import { apiService } from './lib/api.js';
-  
+  import { onMount } from "svelte";
+  import {
+    currentStep,
+    steps,
+    loading,
+    error,
+    setError,
+  } from "./lib/stores.js";
+  import { apiService } from "./lib/api.js";
+
   // Components
-  import FileUpload from './lib/FileUpload.svelte';
-  import DocumentProcessor from './lib/DocumentProcessor.svelte';
-  import DocumentDescription from './lib/DocumentDescription.svelte';
-  import SearchPlans from './lib/SearchPlans.svelte';
-  import SearchExecution from './lib/SearchExecution.svelte';
-  import ReportsViewer from './lib/ReportsViewer.svelte';
-  import FinalReport from './lib/FinalReport.svelte';
+  import FileUpload from "./lib/FileUpload.svelte";
+  import DocumentProcessor from "./lib/DocumentProcessor.svelte";
+  import DocumentDescription from "./lib/DocumentDescription.svelte";
+  import SearchPlans from "./lib/SearchPlans.svelte";
+  import SearchExecution from "./lib/SearchExecution.svelte";
+  import ReportsViewer from "./lib/ReportsViewer.svelte";
+  import FinalReport from "./lib/FinalReport.svelte";
 
   let currentStepValue = 0;
   let isLoading = false;
@@ -24,15 +24,15 @@
   let apiHealthy = false;
 
   // Subscribe to store changes
-  currentStep.subscribe(value => {
+  currentStep.subscribe((value) => {
     currentStepValue = value;
   });
 
-  loading.subscribe(value => {
+  loading.subscribe((value) => {
     isLoading = value;
   });
 
-  error.subscribe(value => {
+  error.subscribe((value) => {
     errorMessage = value;
   });
 
@@ -46,7 +46,9 @@
       apiHealthy = true;
     } catch (err) {
       apiHealthy = false;
-      setError('Backend API is not available. Please make sure the Python server is running.');
+      setError(
+        "Backend API is not available. Please make sure the Python server is running.",
+      );
     }
   }
 
@@ -69,32 +71,32 @@
   }
 
   function handleFilesUploaded(event) {
-    console.log('Files uploaded:', event.detail);
+    console.log("Files uploaded:", event.detail);
     nextStep();
   }
 
   function handleDocumentsProcessed(event) {
-    console.log('Documents processed:', event.detail);
+    console.log("Documents processed:", event.detail);
     nextStep();
   }
 
   function handleDescriptionGenerated(event) {
-    console.log('Description generated:', event.detail);
+    console.log("Description generated:", event.detail);
     // Stay on the same step to allow editing
   }
 
   function handleDescriptionSaved(event) {
-    console.log('Description saved:', event.detail);
+    console.log("Description saved:", event.detail);
     // Stay on the same step
   }
 
   function handlePlansGenerated(event) {
-    console.log('Search plans generated:', event.detail);
+    console.log("Search plans generated:", event.detail);
     // Stay on the same step to allow editing
   }
 
   function handlePlansSaved(event) {
-    console.log('Search plan saved:', event.detail);
+    console.log("Search plan saved:", event.detail);
     // Stay on the same step
   }
 
@@ -103,7 +105,7 @@
   }
 
   function handleExecutionCompleted(event) {
-    console.log('Execution completed:', event.detail);
+    console.log("Execution completed:", event.detail);
     nextStep(); // Go to reports review
   }
 
@@ -112,7 +114,7 @@
   }
 
   function handleReportSaved(event) {
-    console.log('Report saved:', event.detail);
+    console.log("Report saved:", event.detail);
     // Stay on the same step
   }
 
@@ -121,12 +123,12 @@
   }
 
   function handleFinalReportGenerated(event) {
-    console.log('Final report generated:', event.detail);
+    console.log("Final report generated:", event.detail);
     // Stay on the same step
   }
 
   function handleFinalReportSaved(event) {
-    console.log('Final report saved:', event.detail);
+    console.log("Final report saved:", event.detail);
     // Stay on the same step
   }
 
@@ -140,21 +142,35 @@
     <div class="header-content">
       <h1>Semantic Search Assistant</h1>
       <p>AI-powered document research and analysis platform</p>
-      
+
       {#if !apiHealthy}
         <div class="api-status error">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="15" y1="9" x2="9" y2="15"/>
-            <line x1="9" y1="9" x2="15" y2="15"/>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <line x1="15" y1="9" x2="9" y2="15" />
+            <line x1="9" y1="9" x2="15" y2="15" />
           </svg>
           API Disconnected
         </div>
       {:else}
         <div class="api-status healthy">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22,4 12,14.01 9,11.01"/>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22,4 12,14.01 9,11.01" />
           </svg>
           API Connected
         </div>
@@ -165,16 +181,30 @@
   {#if errorMessage}
     <div class="error-banner">
       <div class="error-content">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <line x1="15" y1="9" x2="9" y2="15"/>
-          <line x1="9" y1="9" x2="15" y2="15"/>
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
         </svg>
         <span>{errorMessage}</span>
         <button class="dismiss-btn" on:click={dismissError}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>
@@ -194,7 +224,7 @@
     <!-- Progress Steps -->
     <div class="progress-steps">
       {#each steps as step, index}
-        <div 
+        <div
           class="step"
           class:active={index === currentStepValue}
           class:completed={index < currentStepValue}
@@ -202,8 +232,15 @@
         >
           <div class="step-number">
             {#if index < currentStepValue}
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="20,6 9,17 4,12"/>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <polyline points="20,6 9,17 4,12" />
               </svg>
             {:else}
               {index + 1}
@@ -215,7 +252,10 @@
           </div>
         </div>
         {#if index < steps.length - 1}
-          <div class="step-connector" class:completed={index < currentStepValue}></div>
+          <div
+            class="step-connector"
+            class:completed={index < currentStepValue}
+          ></div>
         {/if}
       {/each}
     </div>
@@ -229,71 +269,90 @@
           <FileUpload on:uploaded={handleFilesUploaded} />
           <DocumentProcessor on:processed={handleDocumentsProcessed} />
         </div>
-      
       {:else if currentStepValue === 1}
         <div class="step-panel">
           <h2>Document Description</h2>
-          <p>Generate and optionally edit a description of your document corpus.</p>
-          <DocumentDescription 
+          <p>
+            Generate and optionally edit a description of your document corpus.
+          </p>
+          <DocumentDescription
             on:generated={handleDescriptionGenerated}
             on:saved={handleDescriptionSaved}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
-            <button class="nav-btn primary" on:click={nextStep}>Continue</button>
+            <button class="nav-btn secondary" on:click={prevStep}
+              >Previous</button
+            >
+            <button class="nav-btn primary" on:click={nextStep}>Continue</button
+            >
           </div>
         </div>
-      
       {:else if currentStepValue === 2}
         <div class="step-panel">
           <h2>Search Plans</h2>
-          <p>Generate search plans based on your research question and edit them as needed.</p>
-          <SearchPlans 
+          <p>
+            Generate search plans based on your research question and edit them
+            as needed.
+          </p>
+          <SearchPlans
             on:generated={handlePlansGenerated}
             on:saved={handlePlansSaved}
             on:execute={handleExecutePlans}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn secondary" on:click={prevStep}
+              >Previous</button
+            >
           </div>
         </div>
-      
       {:else if currentStepValue === 3}
         <div class="step-panel">
           <h2>Execute Search</h2>
-          <p>Run the search agents and monitor their tool calls and progress.</p>
-          <SearchExecution 
+          <p>
+            Run the search agents and monitor their tool calls and progress.
+          </p>
+          <SearchExecution
             on:completed={handleExecutionCompleted}
             on:review={handleReviewReports}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn secondary" on:click={prevStep}
+              >Previous</button
+            >
           </div>
         </div>
-      
       {:else if currentStepValue === 4}
         <div class="step-panel">
           <h2>Review Reports</h2>
-          <p>View and edit the generated search reports before creating the final synthesis.</p>
-          <ReportsViewer 
+          <p>
+            View and edit the generated search reports before creating the final
+            synthesis.
+          </p>
+          <ReportsViewer
             on:saved={handleReportSaved}
             on:synthesize={handleSynthesizeReport}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn secondary" on:click={prevStep}
+              >Previous</button
+            >
           </div>
         </div>
-      
       {:else if currentStepValue === 5}
         <div class="step-panel">
           <h2>Final Report</h2>
-          <p>Generate and optionally edit your comprehensive final research report.</p>
-          <FinalReport 
+          <p>
+            Generate and optionally edit your comprehensive final research
+            report.
+          </p>
+          <FinalReport
             on:generated={handleFinalReportGenerated}
             on:saved={handleFinalReportSaved}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn secondary" on:click={prevStep}
+              >Previous</button
+            >
           </div>
         </div>
       {/if}
@@ -305,7 +364,8 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+      Ubuntu, Cantarell, sans-serif;
     background-color: #f5f7fa;
     color: #333;
   }
@@ -324,7 +384,7 @@
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     padding: 24px 0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
 
   .header-content {
@@ -430,8 +490,12 @@
   }
 
   @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 
   .app-content {
@@ -524,7 +588,7 @@
   .step-content {
     background: white;
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     overflow: hidden;
   }
 

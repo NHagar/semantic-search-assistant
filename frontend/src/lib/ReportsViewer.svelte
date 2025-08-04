@@ -21,7 +21,32 @@
 
   onMount(async () => {
     await loadReports();
+    setupTabs();
   });
+
+  function setupTabs() {
+    // Use setTimeout to ensure DOM elements are available
+    setTimeout(() => {
+      const tabBtns = document.querySelectorAll('.tab-btn');
+      const tabPanels = document.querySelectorAll('.tab-panel');
+      
+      tabBtns.forEach((btn, index) => {
+        btn.addEventListener('click', () => {
+          // Remove active class from all tabs and panels
+          tabBtns.forEach(b => b.classList.remove('active'));
+          tabPanels.forEach(p => {
+            p.classList.remove('active');
+            p.style.display = 'none';
+          });
+          
+          // Add active class to clicked tab and corresponding panel
+          btn.classList.add('active');
+          tabPanels[index].classList.add('active');
+          tabPanels[index].style.display = 'block';
+        });
+      });
+    }, 100);
+  }
 
   async function loadReports() {
     try {
@@ -211,40 +236,42 @@
 
               <!-- Debug Log Tab (hidden by default) -->
               <div class="tab-panel" style="display: none;">
-                {@const debugLog = getReportDebugLog(selectedReport.content)}
-                {@const toolCalls = parseToolCalls(debugLog)}
-                
-                {#if toolCalls.length > 0}
-                  <div class="debug-section">
-                    <h5>Tool Calls ({toolCalls.length})</h5>
-                    {#each toolCalls as toolCall}
-                      <div class="tool-call">
-                        <div class="tool-call-header">
-                          <strong>{toolCall.id}</strong>
-                          <span class="function-name">{toolCall.function}</span>
-                        </div>
-                        
-                        <div class="tool-call-details">
-                          <div class="arguments">
-                            <strong>Arguments:</strong>
-                            <pre>{toolCall.arguments}</pre>
+                {#if selectedReport}
+                  {@const debugLog = getReportDebugLog(selectedReport.content)}
+                  {@const toolCalls = parseToolCalls(debugLog)}
+                  
+                  {#if toolCalls.length > 0}
+                    <div class="debug-section">
+                      <h5>Tool Calls ({toolCalls.length})</h5>
+                      {#each toolCalls as toolCall}
+                        <div class="tool-call">
+                          <div class="tool-call-header">
+                            <strong>{toolCall.id}</strong>
+                            <span class="function-name">{toolCall.function}</span>
                           </div>
                           
-                          <div class="result">
-                            <strong>Result:</strong>
-                            <pre>{formatResult(toolCall.result)}</pre>
+                          <div class="tool-call-details">
+                            <div class="arguments">
+                              <strong>Arguments:</strong>
+                              <pre>{toolCall.arguments}</pre>
+                            </div>
+                            
+                            <div class="result">
+                              <strong>Result:</strong>
+                              <pre>{formatResult(toolCall.result)}</pre>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
+                      {/each}
+                    </div>
+                  {/if}
 
-                {#if debugLog}
-                  <div class="raw-debug">
-                    <h5>Raw Debug Log</h5>
-                    <pre class="debug-log">{debugLog}</pre>
-                  </div>
+                  {#if debugLog}
+                    <div class="raw-debug">
+                      <h5>Raw Debug Log</h5>
+                      <pre class="debug-log">{debugLog}</pre>
+                    </div>
+                  {/if}
                 {/if}
               </div>
             </div>
@@ -624,32 +651,3 @@
     background: #45a049;
   }
 </style>
-
-<script>
-  // Tab functionality
-  function setupTabs() {
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const tabPanels = document.querySelectorAll('.tab-panel');
-    
-    tabBtns.forEach((btn, index) => {
-      btn.addEventListener('click', () => {
-        // Remove active class from all tabs and panels
-        tabBtns.forEach(b => b.classList.remove('active'));
-        tabPanels.forEach(p => {
-          p.classList.remove('active');
-          p.style.display = 'none';
-        });
-        
-        // Add active class to clicked tab and corresponding panel
-        btn.classList.add('active');
-        tabPanels[index].classList.add('active');
-        tabPanels[index].style.display = 'block';
-      });
-    });
-  }
-  
-  // Initialize tabs when component mounts
-  onMount(() => {
-    setupTabs();
-  });
-</script>

@@ -47,10 +47,10 @@ def upload_files():
     data_dir.mkdir(exist_ok=True)
 
     for file in files:
-        if file.filename == "":
+        if not file.filename:
             continue
 
-        if file and file.filename.lower().endswith(".pdf"):
+        if file and file.filename and file.filename.lower().endswith(".pdf"):
             filename = secure_filename(file.filename)
             filepath = data_dir / filename
             file.save(str(filepath))
@@ -295,4 +295,4 @@ def database_stats():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5001)
