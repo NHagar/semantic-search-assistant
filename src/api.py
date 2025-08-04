@@ -262,7 +262,9 @@ class SemanticSearchAPI:
         )
 
         if len(plans) != len(reports):
-            raise ValueError(f"Number of plans ({len(plans)}) and reports ({len(reports)}) do not match.")
+            raise ValueError(
+                f"Number of plans ({len(plans)}) and reports ({len(reports)}) do not match."
+            )
 
         passed_reports = []
 
@@ -361,7 +363,7 @@ class SemanticSearchAPI:
         self.compress_documents()
 
         print("Step 3: Generating search plans...")
-        search_plans = self.generate_search_plans(user_query)
+        self.generate_search_plans(user_query)
 
         print("Step 4: Executing search plans...")
         self.execute_search_plans(chunk_size=chunk_size, overlap=overlap)
