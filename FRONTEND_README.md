@@ -166,7 +166,7 @@ The application uses vanilla CSS with CSS custom properties for theming. Key col
 Update the API base URL in `src/lib/api.js`:
 
 ```javascript
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:5001/api';
 ```
 
 ## Development
