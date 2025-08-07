@@ -13,5 +13,6 @@ data/
 chroma_db/
 *.txt
 final_report.md
+trump_scotland/
 
 .DS_Store
