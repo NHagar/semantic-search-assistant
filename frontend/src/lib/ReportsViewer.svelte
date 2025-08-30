@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { reports, setError, setLoading } from './stores.js';
+  import { reports, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -10,6 +10,8 @@
   let selectedReport = null;
   let editingReport = null;
   let editContent = '';
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
 
   // Subscribe to store changes  
   reports.subscribe(value => {
@@ -18,10 +20,15 @@
       selectedReport = reportsList[0];
     }
   });
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   onMount(async () => {
-    await loadReports();
     setupTabs();
+    // Wait a bit for stores to initialize
+    setTimeout(async () => {
+      await loadReports();
+    }, 100);
   });
 
   function setupTabs() {
@@ -50,7 +57,7 @@
 
   async function loadReports() {
     try {
-      const result = await apiService.getReports();
+      const result = await apiService.getReports(llm, corpus);
       reportsList = result.reports;
       reports.set(result.reports);
       
@@ -74,7 +81,7 @@
 
   async function saveReport() {
     try {
-      await apiService.updateReport(selectedReport.id, editContent);
+      await apiService.updateReport(selectedReport.id, editContent, llm, corpus);
       
       // Update local state
       reportsList = reportsList.map(r => 

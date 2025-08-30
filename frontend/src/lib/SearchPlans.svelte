@@ -1,33 +1,35 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { searchPlans, searchPlansGenerated, userQuery, setError, setLoading } from './stores.js';
+  import { searchPlans, searchPlansGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
   
   let plans = [];
   let generating = false;
-  let query = '';
   let editingPlan = null;
   let editContent = '';
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
   
   // Subscribe to store changes
   searchPlans.subscribe(value => {
     plans = value;
   });
-  
-  userQuery.subscribe(value => {
-    query = value;
-  });
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   onMount(async () => {
-    await loadSearchPlans();
+    // Wait a bit for stores to initialize
+    setTimeout(async () => {
+      await loadSearchPlans();
+    }, 100);
   });
 
   async function loadSearchPlans() {
     try {
-      const result = await apiService.getSearchPlans();
+      const result = await apiService.getSearchPlans(llm, corpus);
       plans = result.plans;
       searchPlans.set(result.plans);
       searchPlansGenerated.set(plans.length > 0);
@@ -37,16 +39,17 @@
   }
 
   async function generateSearchPlans() {
-    if (!query.trim()) {
-      setError('Please enter a research query');
-      return;
-    }
-
     generating = true;
     setLoading(true);
     
     try {
-      const result = await apiService.generateSearchPlans(query);
+      setError(null);
+      const result = await apiService.generateSearchPlans(llm, corpus);
+      
+      if (!result.plans || result.plans.length === 0) {
+        throw new Error('No search plans were generated. Please try again.');
+      }
+      
       plans = result.plans.map((plan, index) => ({
         id: `search_plan_${index + 1}`,
         filename: `search_plan_${index + 1}.txt`,
@@ -55,11 +58,17 @@
       
       searchPlans.set(plans);
       searchPlansGenerated.set(true);
-      userQuery.set(query);
-      dispatch('generated', result);
+      dispatch('generated', { 
+        message: `Successfully generated ${plans.length} comprehensive search plans`,
+        plans: result.plans 
+      });
       setError(null);
     } catch (err) {
-      setError('Failed to generate search plans: ' + err.message);
+      let errorMessage = 'Failed to generate search plans: ' + err.message;
+      if (err.message.includes('validation')) {
+        errorMessage += '\n\nThe system is working to ensure high-quality plans. Please try again.';
+      }
+      setError(errorMessage);
     } finally {
       generating = false;
       setLoading(false);
@@ -73,7 +82,7 @@
 
   async function savePlan(plan) {
     try {
-      await apiService.updateSearchPlan(plan.id, editContent);
+      await apiService.updateSearchPlan(plan.id, editContent, llm, corpus);
       
       // Update local state
       plans = plans.map(p => 
@@ -105,7 +114,7 @@
 
 <div class="search-plans">
   <div class="header">
-    <h3>Search Plans</h3>
+    <h3>Comprehensive Search Plans</h3>
     {#if plans.length > 0}
       <button class="regenerate-btn" on:click={regeneratePlans} disabled={generating}>
         {#if generating}
@@ -118,17 +127,22 @@
   </div>
 
   {#if plans.length === 0}
-    <div class="query-input">
-      <h4>Research Query</h4>
-      <textarea
-        bind:value={query}
-        placeholder="Enter your research question or topic..."
-        rows="3"
-      ></textarea>
+    <div class="generate-section">
+      <div class="info-card">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M9 5H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+          <rect x="9" y="3" width="6" height="4" rx="1"/>
+          <path d="M9 12h6"/>
+          <path d="M9 16h3"/>
+        </svg>
+        <h4>Generate Comprehensive Search Plans</h4>
+        <p>Create systematic search plans to thoroughly analyze your document corpus. The AI will generate 5-7 comprehensive plans covering all major themes and topics in your documents.</p>
+      </div>
+      
       <button 
         class="generate-btn" 
         on:click={generateSearchPlans}
-        disabled={generating || !query.trim()}
+        disabled={generating}
       >
         {#if generating}
           Generating Search Plans...
@@ -138,11 +152,6 @@
       </button>
     </div>
   {:else}
-    <div class="query-display">
-      <h4>Research Query:</h4>
-      <p>"{query}"</p>
-    </div>
-
     <div class="plans-list">
       {#each plans as plan, index}
         <div class="plan-item">
@@ -218,37 +227,47 @@
     cursor: not-allowed;
   }
 
-  .query-input {
+  .generate-section {
     background: white;
-    padding: 24px;
+    padding: 40px 24px;
     border-radius: 8px;
     border: 1px solid #ddd;
+    text-align: center;
   }
 
-  .query-input h4 {
+  .info-card {
+    max-width: 500px;
+    margin: 0 auto 32px auto;
+  }
+
+  .info-card svg {
+    color: #4CAF50;
+    margin-bottom: 16px;
+  }
+
+  .info-card h4 {
     margin: 0 0 12px 0;
     color: #333;
+    font-size: 20px;
   }
 
-  .query-input textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-    resize: vertical;
-    margin-bottom: 16px;
+  .info-card p {
+    margin: 0;
+    color: #666;
+    font-size: 15px;
+    line-height: 1.5;
   }
 
   .generate-btn {
     background: #4CAF50;
     color: white;
     border: none;
-    padding: 12px 24px;
-    border-radius: 6px;
+    padding: 16px 32px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 16px;
-    width: 100%;
+    font-weight: 500;
+    min-width: 200px;
   }
 
   .generate-btn:hover:not(:disabled) {
@@ -258,26 +277,6 @@
   .generate-btn:disabled {
     background: #ccc;
     cursor: not-allowed;
-  }
-
-  .query-display {
-    background: #f8f9fa;
-    padding: 16px;
-    border-radius: 8px;
-    border: 1px solid #e9ecef;
-    margin-bottom: 20px;
-  }
-
-  .query-display h4 {
-    margin: 0 0 8px 0;
-    color: #333;
-    font-size: 14px;
-  }
-
-  .query-display p {
-    margin: 0;
-    font-style: italic;
-    color: #666;
   }
 
   .plans-list {

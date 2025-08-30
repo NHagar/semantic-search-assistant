@@ -6,10 +6,13 @@
     loading,
     error,
     setError,
+    isResuming,
+    resumeStages,
   } from "./lib/stores.js";
   import { apiService } from "./lib/api.js";
 
   // Components
+  import ConfigurationPanel from "./lib/ConfigurationPanel.svelte";
   import FileUpload from "./lib/FileUpload.svelte";
   import DocumentProcessor from "./lib/DocumentProcessor.svelte";
   import DocumentDescription from "./lib/DocumentDescription.svelte";
@@ -22,6 +25,8 @@
   let isLoading = false;
   let errorMessage = null;
   let apiHealthy = false;
+  let resuming = false;
+  let stages = { description: false, plans: false, reports: false, final: false };
 
   // Subscribe to store changes
   currentStep.subscribe((value) => {
@@ -34,6 +39,14 @@
 
   error.subscribe((value) => {
     errorMessage = value;
+  });
+
+  isResuming.subscribe((value) => {
+    resuming = value;
+  });
+
+  resumeStages.subscribe((value) => {
+    stages = value;
   });
 
   onMount(async () => {
@@ -53,8 +66,25 @@
   }
 
   function nextStep() {
-    if (currentStepValue < steps.length - 1) {
-      currentStep.set(currentStepValue + 1);
+    if (resuming && currentStepValue === 0) {
+      // When resuming, jump to the next incomplete stage
+      if (!stages.description) {
+        currentStep.set(1); // Document Description
+      } else if (!stages.plans) {
+        currentStep.set(2); // Search Plans
+      } else if (!stages.reports) {
+        currentStep.set(3); // Search Execution
+      } else if (!stages.final) {
+        currentStep.set(5); // Final Report
+      } else {
+        // All stages complete, go to final report to view
+        currentStep.set(5);
+      }
+    } else {
+      // Normal linear progression
+      if (currentStepValue < steps.length - 1) {
+        currentStep.set(currentStepValue + 1);
+      }
     }
   }
 
@@ -264,10 +294,46 @@
     <div class="step-content">
       {#if currentStepValue === 0}
         <div class="step-panel">
-          <h2>Upload Documents</h2>
-          <p>Upload PDF documents that you want to research and analyze.</p>
-          <FileUpload on:uploaded={handleFilesUploaded} />
-          <DocumentProcessor on:processed={handleDocumentsProcessed} />
+          {#if resuming}
+            <h2>Resume Existing Project</h2>
+            <p>You've selected an existing project. You can skip to any completed stage or continue from where you left off.</p>
+          {:else}
+            <h2>Upload Documents</h2>
+            <p>Configure your research settings and upload PDF documents that you want to research and analyze.</p>
+          {/if}
+          
+          <ConfigurationPanel />
+          
+          {#if !resuming}
+            <FileUpload on:uploaded={handleFilesUploaded} />
+            <DocumentProcessor on:processed={handleDocumentsProcessed} />
+          {:else}
+            <div class="resume-info">
+              <h4>Project Status</h4>
+              <div class="stage-status">
+                <div class="stage {stages.description ? 'complete' : 'incomplete'}">
+                  <span class="stage-icon">{stages.description ? '✅' : '⭕'}</span>
+                  <span class="stage-name">Document Description</span>
+                </div>
+                <div class="stage {stages.plans ? 'complete' : 'incomplete'}">
+                  <span class="stage-icon">{stages.plans ? '✅' : '⭕'}</span>
+                  <span class="stage-name">Search Plans</span>
+                </div>
+                <div class="stage {stages.reports ? 'complete' : 'incomplete'}">
+                  <span class="stage-icon">{stages.reports ? '✅' : '⭕'}</span>
+                  <span class="stage-name">Reports</span>
+                </div>
+                <div class="stage {stages.final ? 'complete' : 'incomplete'}">
+                  <span class="stage-icon">{stages.final ? '✅' : '⭕'}</span>
+                  <span class="stage-name">Final Report</span>
+                </div>
+              </div>
+              <p class="resume-help">Click "Continue" to proceed to the next available step, or use the navigation to jump to any completed stage.</p>
+              <div class="resume-navigation">
+                <button class="nav-btn primary" on:click={nextStep}>Continue</button>
+              </div>
+            </div>
+          {/if}
         </div>
       {:else if currentStepValue === 1}
         <div class="step-panel">
@@ -289,10 +355,9 @@
         </div>
       {:else if currentStepValue === 2}
         <div class="step-panel">
-          <h2>Search Plans</h2>
+          <h2>Comprehensive Search Plans</h2>
           <p>
-            Generate search plans based on your research question and edit them
-            as needed.
+            Generate comprehensive search plans to systematically analyze your entire document corpus and edit them as needed.
           </p>
           <SearchPlans
             on:generated={handlePlansGenerated}
@@ -671,5 +736,66 @@
     .step-panel {
       padding: 24px;
     }
+  }
+
+  .resume-info {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+
+  .resume-info h4 {
+    margin: 0 0 16px 0;
+    color: #495057;
+  }
+
+  .stage-status {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stage {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .stage.complete {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+  }
+
+  .stage.incomplete {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    color: #721c24;
+  }
+
+  .stage-icon {
+    font-size: 16px;
+  }
+
+  .stage-name {
+    font-weight: 500;
+  }
+
+  .resume-help {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    color: #6c757d;
+    font-style: italic;
+  }
+
+  .resume-navigation {
+    display: flex;
+    justify-content: flex-end;
   }
 </style>

@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { finalReport, finalReportGenerated, userQuery, setError, setLoading } from './stores.js';
+  import { finalReport, finalReportGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -9,24 +9,29 @@
   let report = '';
   let generating = false;
   let editing = false;
-  let query = '';
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
+  
+  // Default synthesis query for comprehensive analysis
+  const DEFAULT_SYNTHESIS_QUERY = "Provide a comprehensive analysis and synthesis of all research findings from the document corpus";
   
   // Subscribe to store changes
   finalReport.subscribe(value => {
     report = value;
   });
-  
-  userQuery.subscribe(value => {
-    query = value;
-  });
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   onMount(async () => {
-    await loadFinalReport();
+    // Wait a bit for stores to initialize
+    setTimeout(async () => {
+      await loadFinalReport();
+    }, 100);
   });
 
   async function loadFinalReport() {
     try {
-      const result = await apiService.getFinalReport();
+      const result = await apiService.getFinalReport(llm, corpus);
       report = result.content;
       finalReport.set(result.content);
       finalReportGenerated.set(!!result.content);
@@ -36,16 +41,11 @@
   }
 
   async function generateFinalReport() {
-    if (!query.trim()) {
-      setError('Research query is required to generate final report');
-      return;
-    }
-
     generating = true;
     setLoading(true);
     
     try {
-      const result = await apiService.synthesizeFinalReport(query);
+      const result = await apiService.synthesizeFinalReport(DEFAULT_SYNTHESIS_QUERY, llm, corpus);
       report = result.content;
       finalReport.set(result.content);
       finalReportGenerated.set(true);
@@ -61,7 +61,7 @@
 
   async function saveFinalReport() {
     try {
-      await apiService.updateFinalReport(report);
+      await apiService.updateFinalReport(report, llm, corpus);
       finalReport.set(report);
       editing = false;
       dispatch('saved', { content: report });
@@ -159,13 +159,6 @@
     </div>
   </div>
 
-  {#if query}
-    <div class="query-display">
-      <h4>Research Query:</h4>
-      <p>"{query}"</p>
-    </div>
-  {/if}
-
   {#if !report}
     <div class="generate-section">
       <div class="empty-state">
@@ -177,13 +170,13 @@
           <polyline points="10,9 9,9 8,9"></polyline>
         </svg>
         <h4>No Final Report Generated</h4>
-        <p>Generate a comprehensive final report that synthesizes all research findings.</p>
+        <p>Generate a comprehensive final report that synthesizes all research findings from your search plans.</p>
       </div>
 
       <button 
         class="generate-btn" 
         on:click={generateFinalReport}
-        disabled={generating || !query}
+        disabled={generating}
       >
         {#if generating}
           Generating Final Report...
@@ -320,25 +313,6 @@
     background: #5a6268;
   }
 
-  .query-display {
-    background: #f8f9fa;
-    padding: 16px;
-    border-radius: 8px;
-    border: 1px solid #e9ecef;
-    margin-bottom: 20px;
-  }
-
-  .query-display h4 {
-    margin: 0 0 8px 0;
-    color: #333;
-    font-size: 14px;
-  }
-
-  .query-display p {
-    margin: 0;
-    font-style: italic;
-    color: #666;
-  }
 
   .generate-section {
     text-align: center;

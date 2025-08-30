@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { documentDescription, setError, setLoading } from './stores.js';
+  import { documentDescription, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -9,19 +9,26 @@
   let description = '';
   let editing = false;
   let generating = false;
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
   
   // Subscribe to store changes
   documentDescription.subscribe(value => {
     description = value;
   });
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   onMount(async () => {
-    await loadDescription();
+    // Wait a bit for stores to initialize
+    setTimeout(async () => {
+      await loadDescription();
+    }, 100);
   });
 
   async function loadDescription() {
     try {
-      const result = await apiService.getDescription();
+      const result = await apiService.getDescription(llm, corpus);
       description = result.content;
       documentDescription.set(result.content);
     } catch (err) {
@@ -34,7 +41,7 @@
     setLoading(true);
     
     try {
-      const result = await apiService.compressDocuments();
+      const result = await apiService.compressDocuments(null, llm, corpus);
       description = result.content;
       documentDescription.set(result.content);
       dispatch('generated', result);
@@ -49,7 +56,7 @@
 
   async function saveDescription() {
     try {
-      await apiService.updateDescription(description);
+      await apiService.updateDescription(description, llm, corpus);
       documentDescription.set(description);
       editing = false;
       dispatch('saved', { content: description });

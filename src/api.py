@@ -39,6 +39,7 @@ class SemanticSearchAPI:
         openai_api_key: str = "lm_studio",
         data_dir: str = "data",
         model: str = "qwen/qwen3-14b",
+        corpus_name: str = "",
     ):
         """
         Initialize the semantic search API.
@@ -48,12 +49,28 @@ class SemanticSearchAPI:
             openai_api_key: API key for the service
             data_dir: Directory containing PDF/text documents
             model: Model name to use for LLM operations
+            corpus_name: Name of the document corpus (used for organizing outputs)
         """
         self.client = OpenAI(base_url=openai_base_url, api_key=openai_api_key)
         self.data_dir = data_dir
         self.model = model
+        self.corpus_name = corpus_name
         self.vector_db = VectorDB(data_dir=data_dir)
         self.search_agent = None
+
+    def _get_output_dir(self) -> Path:
+        """Get the output directory path based on corpus name and model."""
+        # Always use organized structure, with "default" as fallback
+        corpus_name = self.corpus_name if self.corpus_name else "default"
+        safe_corpus = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in corpus_name
+        )
+        safe_model = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in self.model
+        )
+        output_dir = Path("outputs") / safe_corpus / safe_model
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
 
     def process_documents(
         self,
@@ -86,7 +103,7 @@ class SemanticSearchAPI:
         self,
         documents: Optional[str] = None,
         prompt_file: str = "prompts/compress.md",
-        output_file: str = "doc_report.txt",
+        output_file: Optional[str] = None,
     ) -> str:
         """
         Compress documents using LLM.
@@ -101,6 +118,11 @@ class SemanticSearchAPI:
         """
         if documents is None:
             documents = self.process_documents()
+
+        if output_file is None:
+            output_file = self._get_output_dir() / "doc_report.txt"
+        else:
+            output_file = self._get_output_dir() / output_file
 
         with open(prompt_file, "r") as f:
             prompt = f.read()
@@ -122,21 +144,24 @@ class SemanticSearchAPI:
 
     def generate_search_plans(
         self,
-        user_query: str,
-        doc_report_file: str = "doc_report.txt",
+        doc_report_file: Optional[str] = None,
         prompt_file: str = "prompts/plan.md",
+        max_retries: int = 3,
     ) -> List[str]:
         """
-        Generate search plans based on user query and document report.
+        Generate comprehensive search plans based on document corpus analysis.
 
         Args:
-            user_query: The user's research question
             doc_report_file: Path to document report file
             prompt_file: Path to planning prompt file
+            max_retries: Maximum number of retry attempts
 
         Returns:
             List of search plan strings
         """
+        if doc_report_file is None:
+            doc_report_file = str(self._get_output_dir() / "doc_report.txt")
+
         with open(prompt_file, "r") as f:
             prompt = f.read()
 
@@ -152,31 +177,57 @@ class SemanticSearchAPI:
         user_input = f"""<report>
 {doc_report}
 </report>
-
-<user_query>
-{user_query}
-</user_query>
 """
 
-        response = self.client.beta.chat.completions.parse(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": prompt},
-                {"role": "user", "content": user_input},
-            ],
-            response_format=SearchPlans,
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                print(
+                    f"Generating search plans (attempt {attempt + 1}/{max_retries})..."
+                )
+
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": prompt},
+                        {"role": "user", "content": user_input},
+                    ],
+                    temperature=0.7
+                    if attempt > 0
+                    else 0.3,  # Increase creativity on retries
+                )
+
+                resp_object = response.choices[0].message.content
+                if resp_object is None:
+                    raise ValueError("Received empty response from LLM")
+                resp_object_nothink = resp_object.split("</think>")[-1].strip()
+                resp_plans = resp_object_nothink.split("**SEARCH PLAN")
+                resp_plans = [f"**SEARCH PLAN {i}" for i in resp_plans if i.strip()]
+
+                print(f"Successfully generated {len(resp_plans)} search plans")
+
+                # Save search plans to files
+                output_dir = self._get_output_dir()
+                for i, plan in enumerate(resp_plans, start=1):
+                    plan_file = output_dir / f"search_plan_{i}.txt"
+                    with open(plan_file, "w") as f:
+                        f.write(plan + "\n\n" + deterministic_blob)
+
+                return resp_plans
+
+            except Exception as e:
+                last_error = e
+                print(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt < max_retries - 1:
+                    print("Retrying with adjusted parameters...")
+                    continue
+                else:
+                    print("All attempts failed")
+
+        # If we get here, all retries failed
+        raise Exception(
+            f"Failed to generate valid search plans after {max_retries} attempts. Last error: {str(last_error)}"
         )
-
-        resp_object = response.choices[0].message.content
-        resp_plans = json.loads(resp_object)
-        resp_plans = SearchPlans(**resp_plans)
-
-        # Save search plans to files
-        for i, plan in enumerate(resp_plans.search_plans, start=1):
-            with open(f"search_plan_{i}.txt", "w") as f:
-                f.write(plan + "\n\n" + deterministic_blob)
-
-        return resp_plans.search_plans
 
     def execute_search_plans(
         self,
@@ -201,12 +252,14 @@ class SemanticSearchAPI:
         # Build vector database if needed
         self.vector_db.build_database(chunk_size=chunk_size, overlap=overlap)
 
+        output_dir = self._get_output_dir()
+
         if search_plans is None:
-            plan_files = sorted(Path(".").glob("search_plan_*.txt"))
+            plan_files = sorted(output_dir.glob("search_plan_*.txt"))
         else:
             plan_files = []
             for i, plan in enumerate(search_plans, start=1):
-                plan_file = Path(f"search_plan_{i}.txt")
+                plan_file = output_dir / f"search_plan_{i}.txt"
                 if not plan_file.exists():
                     with open(plan_file, "w") as f:
                         f.write(plan)
@@ -222,7 +275,7 @@ class SemanticSearchAPI:
             )
 
             # Save the report
-            report_filename = f"report_{plan_file.stem}.txt"
+            report_filename = output_dir / f"report_{plan_file.stem}.txt"
             with open(report_filename, "w") as f:
                 f.write(report)
 
@@ -235,7 +288,7 @@ class SemanticSearchAPI:
         user_query: str,
         evaluate_prompt_file: str = "prompts/evaluate.md",
         synthesize_prompt_file: str = "prompts/synthesize.md",
-        output_file: str = "final_report.md",
+        output_file: Optional[str] = None,
     ) -> str:
         """
         Evaluate search reports and synthesize final answer.
@@ -255,10 +308,12 @@ class SemanticSearchAPI:
         with open(synthesize_prompt_file, "r") as f:
             synthesize_prompt = f.read()
 
+        output_dir = self._get_output_dir()
+
         # Load plans and reports
-        plans = sorted(Path(".").glob("search_plan_*.txt"), key=lambda p: p.name)
+        plans = sorted(output_dir.glob("search_plan_*.txt"), key=lambda p: p.name)
         reports = sorted(
-            Path(".").glob("report_search_plan_*.txt"), key=lambda p: p.name
+            output_dir.glob("report_search_plan_*.txt"), key=lambda p: p.name
         )
 
         if len(plans) != len(reports):
@@ -305,7 +360,10 @@ class SemanticSearchAPI:
                 response_format=Evaluation,
             )
 
-            report_evaluation = json.loads(response.choices[0].message.content)
+            content = response.choices[0].message.content
+            if content is None:
+                raise ValueError("Received empty response from LLM during evaluation")
+            report_evaluation = json.loads(content)
 
             if report_evaluation["is_relevant"] and report_evaluation["is_thorough"]:
                 passed_reports.append(report_content)
@@ -330,6 +388,11 @@ class SemanticSearchAPI:
 
         final_report = response.choices[0].message.content
 
+        if output_file is None:
+            output_file = output_dir / "final_report.md"
+        else:
+            output_file = output_dir / output_file
+
         with open(output_file, "w") as f:
             f.write(final_report)
 
@@ -337,21 +400,21 @@ class SemanticSearchAPI:
 
     def full_research_pipeline(
         self,
-        user_query: str,
         n_tokens: int = 100,
         token_budget: int = 6500,
         chunk_size: int = 1024,
         overlap: int = 20,
+        synthesis_query: str = "Provide a comprehensive analysis of the document corpus",
     ) -> str:
         """
         Execute the complete research pipeline from start to finish.
 
         Args:
-            user_query: The research question to investigate
             n_tokens: Number of tokens to sample from each document
             token_budget: Total token budget for document processing
             chunk_size: Chunk size for vector database
             overlap: Overlap size for chunking
+            synthesis_query: Query to use for final synthesis (optional)
 
         Returns:
             Final synthesized research report
@@ -362,14 +425,14 @@ class SemanticSearchAPI:
         print("Step 2: Compressing documents...")
         self.compress_documents()
 
-        print("Step 3: Generating search plans...")
-        self.generate_search_plans(user_query)
+        print("Step 3: Generating comprehensive search plans...")
+        self.generate_search_plans()
 
         print("Step 4: Executing search plans...")
         self.execute_search_plans(chunk_size=chunk_size, overlap=overlap)
 
         print("Step 5: Evaluating and synthesizing results...")
-        final_report = self.evaluate_and_synthesize(user_query)
+        final_report = self.evaluate_and_synthesize(synthesis_query)
 
         print("Research pipeline complete!")
         return final_report
@@ -428,16 +491,19 @@ def create_api(
     )
 
 
-def research_question(
-    query: str, n_tokens: int = 100, token_budget: int = 6500, **kwargs
+def research_corpus(
+    n_tokens: int = 100,
+    token_budget: int = 6500,
+    synthesis_query: str = "Provide a comprehensive analysis of the document corpus",
+    **kwargs,
 ) -> str:
     """
-    Quick function to research a question using the full pipeline.
+    Quick function to research a document corpus using the full pipeline.
 
     Args:
-        query: The research question
         n_tokens: Number of tokens to sample from each document
         token_budget: Total token budget for document processing
+        synthesis_query: Query to use for final synthesis
         **kwargs: Additional arguments passed to create_api()
 
     Returns:
@@ -445,7 +511,7 @@ def research_question(
     """
     api = create_api(**kwargs)
     return api.full_research_pipeline(
-        user_query=query, n_tokens=n_tokens, token_budget=token_budget
+        n_tokens=n_tokens, token_budget=token_budget, synthesis_query=synthesis_query
     )
 
 

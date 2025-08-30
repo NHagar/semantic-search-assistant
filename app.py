@@ -3,6 +3,7 @@
 Flask web API for the semantic search assistant.
 """
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -15,22 +16,77 @@ from src.api import SemanticSearchAPI
 app = Flask(__name__)
 CORS(app)
 
-# Global API instance - will be initialized on first use
-api_instance: Optional[SemanticSearchAPI] = None
+# Global API instances - will be created as needed per LLM/corpus combination
+api_instances: dict = {}
 
 
-def get_api():
-    """Get or create the API instance."""
-    global api_instance
-    if api_instance is None:
-        api_instance = SemanticSearchAPI()
-    return api_instance
+def get_api(llm: str = "qwen/qwen3-14b", corpus_name: str = ""):
+    """Get or create the API instance for specific LLM and corpus."""
+    # Use defaults if empty strings are provided
+    if not llm or llm.strip() == "":
+        llm = "qwen/qwen3-14b"
+    if not corpus_name or corpus_name.strip() == "":
+        corpus_name = "default"
+        
+    key = f"{llm}|{corpus_name}"
+    if key not in api_instances:
+        print(f"Creating API instance with LLM: {llm}, Corpus: {corpus_name}")
+        api_instances[key] = SemanticSearchAPI(model=llm, corpus_name=corpus_name)
+    return api_instances[key]
 
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
     """Health check endpoint."""
     return jsonify({"status": "healthy", "message": "Semantic Search API is running"})
+
+
+@app.route("/api/existing-combinations", methods=["GET"])
+def get_existing_combinations():
+    """Get list of existing model-corpus combinations."""
+    try:
+        combinations = []
+        outputs_dir = Path("outputs")
+        
+        if outputs_dir.exists():
+            for corpus_dir in outputs_dir.iterdir():
+                if corpus_dir.is_dir():
+                    corpus_name = corpus_dir.name
+                    for model_dir in corpus_dir.iterdir():
+                        if model_dir.is_dir():
+                            model_name = model_dir.name
+                            # Convert back from safe filename to original format
+                            original_model = model_name.replace('_', '/')
+                            
+                            # Check if this combination has any files
+                            files = list(model_dir.glob("*.txt")) + list(model_dir.glob("*.md"))
+                            if files:
+                                # Determine what stages are complete
+                                has_description = (model_dir / "doc_report.txt").exists()
+                                has_plans = len(list(model_dir.glob("search_plan_*.txt"))) > 0
+                                has_reports = len(list(model_dir.glob("report_search_plan_*.txt"))) > 0
+                                has_final = (model_dir / "final_report.md").exists()
+                                
+                                combinations.append({
+                                    "corpus_name": corpus_name,
+                                    "model_name": original_model,
+                                    "display_name": f"{corpus_name} ({original_model})",
+                                    "stages": {
+                                        "description": has_description,
+                                        "plans": has_plans,
+                                        "reports": has_reports,
+                                        "final": has_final
+                                    },
+                                    "file_count": len(files),
+                                    "last_modified": max(f.stat().st_mtime for f in files) if files else 0
+                                })
+        
+        # Sort by last modified time, newest first
+        combinations.sort(key=lambda x: x["last_modified"], reverse=True)
+        
+        return jsonify({"combinations": combinations})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/upload", methods=["POST"])
@@ -68,9 +124,11 @@ def process_documents():
 
     n_tokens = data.get("n_tokens", 100)
     token_budget = data.get("token_budget", 6500)
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
 
     try:
-        api = get_api()
+        api = get_api(llm=llm, corpus_name=corpus_name)
         result = api.process_documents(
             n_tokens=n_tokens,
             token_budget=token_budget,
@@ -89,9 +147,11 @@ def compress_documents():
     """Generate document corpus description."""
     data = request.get_json() or {}
     documents = data.get("documents")
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
 
     try:
-        api = get_api()
+        api = get_api(llm=llm, corpus_name=corpus_name)
         result = api.compress_documents(documents=documents)
         return jsonify(
             {"message": "Documents compressed successfully", "content": result}
@@ -107,8 +167,13 @@ def update_description():
     if not data or "description" not in data:
         return jsonify({"error": "Description is required"}), 400
 
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
     try:
-        with open("doc_report.txt", "w") as f:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        doc_report_file = api._get_output_dir() / "doc_report.txt"
+        with open(doc_report_file, "w") as f:
             f.write(data["description"])
         return jsonify({"message": "Description updated successfully"})
     except Exception as e:
@@ -118,9 +183,18 @@ def update_description():
 @app.route("/api/get-description", methods=["GET"])
 def get_description():
     """Get the current document corpus description."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+    
+    print(f"GET /api/get-description - LLM: '{llm}', Corpus: '{corpus_name}'")
+    
     try:
-        if Path("doc_report.txt").exists():
-            with open("doc_report.txt", "r") as f:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        doc_report_file = api._get_output_dir() / "doc_report.txt"
+        print(f"Looking for file at: {doc_report_file}")
+        
+        if doc_report_file.exists():
+            with open(doc_report_file, "r") as f:
                 content = f.read()
             return jsonify({"content": content})
         else:
@@ -131,14 +205,15 @@ def get_description():
 
 @app.route("/api/generate-search-plans", methods=["POST"])
 def generate_search_plans():
-    """Generate search plans based on user query."""
-    data = request.get_json()
-    if not data or "user_query" not in data:
-        return jsonify({"error": "User query is required"}), 400
+    """Generate comprehensive search plans based on document corpus."""
+    data = request.get_json() or {}
+
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
 
     try:
-        api = get_api()
-        plans = api.generate_search_plans(data["user_query"])
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        plans = api.generate_search_plans()
         return jsonify(
             {"message": "Search plans generated successfully", "plans": plans}
         )
@@ -149,9 +224,14 @@ def generate_search_plans():
 @app.route("/api/get-search-plans", methods=["GET"])
 def get_search_plans():
     """Get existing search plans."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+    
     try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        output_dir = api._get_output_dir()
         plans = []
-        plan_files = sorted(Path(".").glob("search_plan_*.txt"))
+        plan_files = sorted(output_dir.glob("search_plan_*.txt"))
 
         for plan_file in plan_files:
             with open(plan_file, "r") as f:
@@ -172,8 +252,12 @@ def update_search_plan():
     if not data or "plan_id" not in data or "content" not in data:
         return jsonify({"error": "Plan ID and content are required"}), 400
 
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
     try:
-        plan_file = Path(f"{data['plan_id']}.txt")
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        plan_file = api._get_output_dir() / f"{data['plan_id']}.txt"
         with open(plan_file, "w") as f:
             f.write(data["content"])
         return jsonify({"message": "Search plan updated successfully"})
@@ -187,9 +271,11 @@ def execute_search_plans():
     data = request.get_json() or {}
     chunk_size = data.get("chunk_size", 1024)
     overlap = data.get("overlap", 20)
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
 
     try:
-        api = get_api()
+        api = get_api(llm=llm, corpus_name=corpus_name)
         reports = api.execute_search_plans(chunk_size=chunk_size, overlap=overlap)
         return jsonify(
             {"message": f"Generated {len(reports)} reports", "reports": reports}
@@ -201,9 +287,14 @@ def execute_search_plans():
 @app.route("/api/get-reports", methods=["GET"])
 def get_reports():
     """Get existing search reports."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+    
     try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        output_dir = api._get_output_dir()
         reports = []
-        report_files = sorted(Path(".").glob("report_search_plan_*.txt"))
+        report_files = sorted(output_dir.glob("report_search_plan_*.txt"))
 
         for report_file in report_files:
             with open(report_file, "r") as f:
@@ -228,8 +319,12 @@ def update_report():
     if not data or "report_id" not in data or "content" not in data:
         return jsonify({"error": "Report ID and content are required"}), 400
 
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
     try:
-        report_file = Path(f"{data['report_id']}.txt")
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        report_file = api._get_output_dir() / f"{data['report_id']}.txt"
         with open(report_file, "w") as f:
             f.write(data["content"])
         return jsonify({"message": "Report updated successfully"})
@@ -244,8 +339,11 @@ def synthesize_final_report():
     if not data or "user_query" not in data:
         return jsonify({"error": "User query is required"}), 400
 
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
     try:
-        api = get_api()
+        api = get_api(llm=llm, corpus_name=corpus_name)
         final_report = api.evaluate_and_synthesize(data["user_query"])
         return jsonify(
             {"message": "Final report generated successfully", "content": final_report}
@@ -257,9 +355,14 @@ def synthesize_final_report():
 @app.route("/api/get-final-report", methods=["GET"])
 def get_final_report():
     """Get the final synthesized report."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+    
     try:
-        if Path("final_report.md").exists():
-            with open("final_report.md", "r") as f:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        final_report_file = api._get_output_dir() / "final_report.md"
+        if final_report_file.exists():
+            with open(final_report_file, "r") as f:
                 content = f.read()
             return jsonify({"content": content})
         else:
@@ -275,8 +378,13 @@ def update_final_report():
     if not data or "content" not in data:
         return jsonify({"error": "Content is required"}), 400
 
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
     try:
-        with open("final_report.md", "w") as f:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        final_report_file = api._get_output_dir() / "final_report.md"
+        with open(final_report_file, "w") as f:
             f.write(data["content"])
         return jsonify({"message": "Final report updated successfully"})
     except Exception as e:
@@ -286,8 +394,11 @@ def update_final_report():
 @app.route("/api/database-stats", methods=["GET"])
 def database_stats():
     """Get vector database statistics."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+    
     try:
-        api = get_api()
+        api = get_api(llm=llm, corpus_name=corpus_name)
         stats = api.get_database_stats()
         return jsonify(stats)
     except Exception as e:

@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { processedDocuments, setError, setLoading } from './stores.js';
+  import { processedDocuments, setError, setLoading, selectedLLM, corpusName } from './stores.js';
 
   const dispatch = createEventDispatcher();
   
@@ -9,6 +9,12 @@
   let tokenBudget = 6500;
   let processing = false;
   let processedContent = '';
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
+
+  // Subscribe to store values
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   async function processDocuments() {
     processing = true;
@@ -18,7 +24,7 @@
       const result = await apiService.processDocuments({
         n_tokens: nTokens,
         token_budget: tokenBudget
-      });
+      }, llm, corpus);
       
       processedContent = result.content;
       processedDocuments.set(result.content);

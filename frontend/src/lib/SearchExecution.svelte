@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { reports, reportsGenerated, setError, setLoading } from './stores.js';
+  import { reports, reportsGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -12,19 +12,26 @@
   let overlap = 20;
   let executionComplete = false;
   let generatedReports = [];
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
 
   // Subscribe to store changes
   reports.subscribe(value => {
     generatedReports = value;
   });
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   onMount(async () => {
-    await loadExistingReports();
+    // Wait a bit for stores to initialize
+    setTimeout(async () => {
+      await loadExistingReports();
+    }, 100);
   });
 
   async function loadExistingReports() {
     try {
-      const result = await apiService.getReports();
+      const result = await apiService.getReports(llm, corpus);
       generatedReports = result.reports;
       reports.set(result.reports);
       reportsGenerated.set(generatedReports.length > 0);
@@ -48,7 +55,7 @@
       const result = await apiService.executeSearchPlans({
         chunk_size: chunkSize,
         overlap: overlap
-      });
+      }, llm, corpus);
       
       addLog('success', `Execution completed! Generated ${result.reports.length} reports`);
       
