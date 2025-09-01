@@ -6,7 +6,6 @@
   const dispatch = createEventDispatcher();
   
   let nTokens = 100;
-  let tokenBudget = 6500;
   let processing = false;
   let processedContent = '';
   let llm = 'qwen/qwen3-14b';
@@ -22,8 +21,7 @@
     
     try {
       const result = await apiService.processDocuments({
-        n_tokens: nTokens,
-        token_budget: tokenBudget
+        n_tokens: nTokens
       }, llm, corpus);
       
       processedContent = result.content;
@@ -56,18 +54,6 @@
       <small>Number of tokens to sample from each document</small>
     </div>
 
-    <div class="setting-group">
-      <label for="tokenBudget">Total token budget:</label>
-      <input 
-        id="tokenBudget"
-        type="number" 
-        bind:value={tokenBudget} 
-        min="1000" 
-        max="50000"
-        disabled={processing}
-      />
-      <small>Maximum total tokens across all documents</small>
-    </div>
 
     <button 
       class="process-btn" 

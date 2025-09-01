@@ -6,13 +6,18 @@ previously available as sequential scripts.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel
 
-from .extract_and_sample_pdfs import process_pdfs_and_sample
+from .extract_and_sample_pdfs import (
+    extract_pdfs_to_txt,
+    process_pdfs_and_sample,
+    sample_from_txt_files,
+)
 from .search import SearchAgent
 from .vector_db import VectorDB
 
@@ -26,6 +31,23 @@ class Evaluation(BaseModel):
     relevance_rating_reason: str
     is_thorough: bool
     thorough_rating_reason: str
+
+
+def _pydantic_schema_for_openai(model_cls: type[BaseModel]) -> dict:
+    """
+    Pydantic v2 emits a valid JSON Schema. We add a conservative guard
+    to forbid extra keys so LM Studio (and other servers) stay strict.
+    """
+    schema = model_cls.model_json_schema()
+    schema.setdefault("additionalProperties", False)
+    return schema
+
+
+def _strip_fences(s: str) -> str:
+    # Just in case a model wraps the JSON in ```json ... ```
+    if s.startswith("```"):
+        s = re.sub(r"^```(?:json)?\s*|\s*```$", "", s.strip(), flags=re.IGNORECASE)
+    return s.strip()
 
 
 class SemanticSearchAPI:
@@ -55,7 +77,7 @@ class SemanticSearchAPI:
         self.data_dir = data_dir
         self.model = model
         self.corpus_name = corpus_name
-        self.vector_db = VectorDB(data_dir=data_dir)
+        self.vector_db = VectorDB(data_dir=data_dir, corpus_name=corpus_name)
         self.search_agent = None
 
     def _get_output_dir(self) -> Path:
@@ -72,10 +94,50 @@ class SemanticSearchAPI:
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
+    def extract_documents(self, verbose: bool = True) -> List[Dict[str, Any]]:
+        """
+        Extract text from PDF documents to txt files.
+
+        Args:
+            verbose: Whether to print progress messages
+
+        Returns:
+            List of extracted file metadata
+        """
+        return extract_pdfs_to_txt(data_dir=self.data_dir, verbose=verbose)
+
+    def sample_documents(
+        self,
+        n_tokens: int = 100,
+        verbose: bool = True,
+    ) -> str:
+        """
+        Sample tokens from existing txt files.
+
+        Args:
+            n_tokens: Number of tokens to sample from each document
+            verbose: Whether to print progress messages
+
+        Returns:
+            Combined sampled text from all txt files
+        """
+        from pathlib import Path
+
+        # Count txt files to calculate token budget automatically
+        data_path = Path(self.data_dir)
+        txt_files = list(data_path.glob("*.txt")) if data_path.exists() else []
+        token_budget = len(txt_files) * n_tokens + 100  # Add 100 token buffer
+
+        return sample_from_txt_files(
+            data_dir=self.data_dir,
+            n_tokens=n_tokens,
+            token_budget=token_budget,
+            verbose=verbose,
+        )
+
     def process_documents(
         self,
         n_tokens: int = 100,
-        token_budget: int = 6500,
         save_txt_files: bool = True,
         verbose: bool = True,
     ) -> str:
@@ -84,13 +146,19 @@ class SemanticSearchAPI:
 
         Args:
             n_tokens: Number of tokens to sample from each document
-            token_budget: Total token budget for all documents
             save_txt_files: Whether to save extracted text as .txt files
             verbose: Whether to print progress messages
 
         Returns:
             Combined sampled text from all PDFs
         """
+        from pathlib import Path
+
+        # Count PDF files to calculate token budget automatically
+        data_path = Path(self.data_dir)
+        pdf_files = list(data_path.glob("*.pdf")) if data_path.exists() else []
+        token_budget = len(pdf_files) * n_tokens + 100  # Add 100 token buffer
+
         return process_pdfs_and_sample(
             data_dir=self.data_dir,
             n_tokens=n_tokens,
@@ -117,7 +185,7 @@ class SemanticSearchAPI:
             Compressed document content
         """
         if documents is None:
-            documents = self.process_documents()
+            documents = self.sample_documents()
 
         if output_file is None:
             output_file = self._get_output_dir() / "doc_report.txt"
@@ -133,9 +201,12 @@ class SemanticSearchAPI:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": documents},
             ],
+            timeout=1_800,
         )
 
         result = response.choices[0].message.content
+        if result is None:
+            raise ValueError("Received empty response from LLM")
 
         with open(output_file, "w") as f:
             f.write(result)
@@ -351,21 +422,29 @@ class SemanticSearchAPI:
 </REPORT>
 """
 
-            response = self.client.beta.chat.completions.parse(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": evaluate_prompt},
                     {"role": "user", "content": user_input},
                 ],
-                response_format=Evaluation,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "Evaluation",
+                        "schema": _pydantic_schema_for_openai(Evaluation),
+                        "strict": True,
+                    },
+                },
             )
 
             content = response.choices[0].message.content
             if content is None:
                 raise ValueError("Received empty response from LLM during evaluation")
-            report_evaluation = json.loads(content)
+            data = json.loads(_strip_fences(content))
+            report_evaluation: Evaluation = Evaluation.model_validate(data)
 
-            if report_evaluation["is_relevant"] and report_evaluation["is_thorough"]:
+            if report_evaluation.is_relevant and report_evaluation.is_thorough:
                 passed_reports.append(report_content)
 
         # Synthesize final report
@@ -401,7 +480,6 @@ class SemanticSearchAPI:
     def full_research_pipeline(
         self,
         n_tokens: int = 100,
-        token_budget: int = 6500,
         chunk_size: int = 1024,
         overlap: int = 20,
         synthesis_query: str = "Provide a comprehensive analysis of the document corpus",
@@ -411,7 +489,6 @@ class SemanticSearchAPI:
 
         Args:
             n_tokens: Number of tokens to sample from each document
-            token_budget: Total token budget for document processing
             chunk_size: Chunk size for vector database
             overlap: Overlap size for chunking
             synthesis_query: Query to use for final synthesis (optional)
@@ -420,7 +497,7 @@ class SemanticSearchAPI:
             Final synthesized research report
         """
         print("Step 1: Processing documents...")
-        self.process_documents(n_tokens=n_tokens, token_budget=token_budget)
+        self.process_documents(n_tokens=n_tokens)
 
         print("Step 2: Compressing documents...")
         self.compress_documents()
@@ -481,6 +558,7 @@ def create_api(
     openai_api_key: str = "lm_studio",
     data_dir: str = "data",
     model: str = "qwen/qwen3-14b",
+    corpus_name: str = "",
 ) -> SemanticSearchAPI:
     """Create and return a SemanticSearchAPI instance."""
     return SemanticSearchAPI(
@@ -488,12 +566,12 @@ def create_api(
         openai_api_key=openai_api_key,
         data_dir=data_dir,
         model=model,
+        corpus_name=corpus_name,
     )
 
 
 def research_corpus(
     n_tokens: int = 100,
-    token_budget: int = 6500,
     synthesis_query: str = "Provide a comprehensive analysis of the document corpus",
     **kwargs,
 ) -> str:
@@ -502,7 +580,6 @@ def research_corpus(
 
     Args:
         n_tokens: Number of tokens to sample from each document
-        token_budget: Total token budget for document processing
         synthesis_query: Query to use for final synthesis
         **kwargs: Additional arguments passed to create_api()
 
@@ -511,7 +588,7 @@ def research_corpus(
     """
     api = create_api(**kwargs)
     return api.full_research_pipeline(
-        n_tokens=n_tokens, token_budget=token_budget, synthesis_query=synthesis_query
+        n_tokens=n_tokens, synthesis_query=synthesis_query
     )
 
 

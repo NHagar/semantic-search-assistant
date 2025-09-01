@@ -41,6 +41,174 @@ def sample_tokens(text, n_tokens, encoding_name="cl100k_base"):
     return encoding.decode(sampled_tokens)
 
 
+def extract_pdfs_to_txt(data_dir, verbose=True):
+    """
+    Extract text from PDFs and save as txt files (no token sampling).
+
+    Args:
+        data_dir: Path to directory containing PDF files
+        verbose: Whether to print progress messages
+
+    Returns:
+        list: List of extracted files with metadata
+    """
+    data_dir = Path(data_dir)
+    if not data_dir.exists():
+        if verbose:
+            print(f"Error: Directory {data_dir} does not exist")
+        return []
+
+    # Find all PDF files
+    pdf_files = list(data_dir.glob("*.pdf"))
+    if verbose:
+        print(f"Found {len(pdf_files)} PDF files")
+
+    if len(pdf_files) == 0:
+        if verbose:
+            print("No PDF files found in the data directory")
+        return []
+
+    # Process each PDF
+    results = []
+
+    for pdf_file in sorted(pdf_files):
+        txt_file = pdf_file.with_suffix(".txt")
+        
+        # Check if txt file already exists
+        if txt_file.exists():
+            if verbose:
+                print(f"Skipping {pdf_file.name} - txt file already exists")
+            
+            # Read existing txt file to get stats
+            with open(txt_file, "r", encoding="utf-8") as f:
+                text = f.read()
+        else:
+            if verbose:
+                print(f"Extracting text from {pdf_file.name}...")
+
+            # Extract text
+            text = extract_text_from_pdf(pdf_file)
+            if not text.strip():
+                if verbose:
+                    print(f"Warning: No text extracted from {pdf_file.name}")
+                continue
+
+            # Save as txt file
+            with open(txt_file, "w", encoding="utf-8") as f:
+                f.write(text)
+
+        # Get token count for stats
+        token_count = count_tokens(text)
+
+        results.append(
+            {
+                "filename": pdf_file.name,
+                "txt_filename": txt_file.name,
+                "token_count": token_count,
+                "extracted": not txt_file.exists(),
+            }
+        )
+
+    if verbose:
+        print(f"\nExtraction complete!")
+        print(f"Processed {len(results)} files")
+        total_tokens = sum(r["token_count"] for r in results)
+        print(f"Total tokens available: {total_tokens}")
+
+    return results
+
+
+def sample_from_txt_files(data_dir, n_tokens, token_budget=None, verbose=True):
+    """
+    Sample tokens from existing txt files.
+
+    Args:
+        data_dir: Path to directory containing txt files
+        n_tokens: Number of tokens to sample from each document
+        token_budget: Optional total token budget limit
+        verbose: Whether to print progress messages
+
+    Returns:
+        str: Combined sampled text from all txt files
+    """
+    data_dir = Path(data_dir)
+    if not data_dir.exists():
+        if verbose:
+            print(f"Error: Directory {data_dir} does not exist")
+        return ""
+
+    # Find all txt files
+    txt_files = list(data_dir.glob("*.txt"))
+    if verbose:
+        print(f"Found {len(txt_files)} txt files")
+
+    if len(txt_files) == 0:
+        if verbose:
+            print("No txt files found in the data directory")
+        return ""
+
+    # Check if token budget is sufficient
+    if token_budget:
+        total_tokens_needed = len(txt_files) * n_tokens
+        if total_tokens_needed > token_budget:
+            if verbose:
+                print(
+                    f"Warning: Total tokens needed ({total_tokens_needed}) exceeds budget ({token_budget})"
+                )
+                print("Consider reducing n-tokens or increasing token budget")
+
+    # Process each txt file
+    results = []
+    total_tokens_used = 0
+
+    for txt_file in sorted(txt_files):
+        if verbose:
+            print(f"Sampling from {txt_file.name}...")
+
+        # Read text
+        with open(txt_file, "r", encoding="utf-8") as f:
+            text = f.read()
+        
+        if not text.strip():
+            if verbose:
+                print(f"Warning: No text in {txt_file.name}")
+            continue
+
+        # Sample tokens
+        sampled_text = sample_tokens(text, n_tokens)
+        tokens_used = count_tokens(sampled_text)
+        total_tokens_used += tokens_used
+
+        results.append(
+            {
+                "filename": txt_file.name,
+                "sampled_text": sampled_text,
+                "tokens_used": tokens_used,
+            }
+        )
+
+        # Check if we're exceeding the token budget
+        if token_budget and total_tokens_used > token_budget:
+            if verbose:
+                print(f"Token budget exceeded after processing {txt_file.name}")
+            break
+
+    # Combine sampled text
+    combined_text = ""
+    for result in results:
+        combined_text += f"[{result['filename']}]\n"
+        combined_text += result["sampled_text"]
+        combined_text += "\n\n"
+
+    if verbose:
+        print("\nSampling complete!")
+        print(f"Sampled from {len(results)} files")
+        print(f"Total tokens used: {total_tokens_used}")
+        print(f"Tokens in combined text: {count_tokens(combined_text)}")
+
+    return combined_text
+
+
 def process_pdfs_and_sample(
     data_dir, n_tokens, token_budget=None, save_txt_files=True, verbose=True
 ):
@@ -88,21 +256,31 @@ def process_pdfs_and_sample(
     total_tokens_used = 0
 
     for pdf_file in sorted(pdf_files):
-        if verbose:
-            print(f"Processing {pdf_file.name}...")
-
-        # Extract text
-        text = extract_text_from_pdf(pdf_file)
-        if not text.strip():
+        txt_file = pdf_file.with_suffix(".txt")
+        
+        # Check if txt file already exists
+        if txt_file.exists():
             if verbose:
-                print(f"Warning: No text extracted from {pdf_file.name}")
-            continue
+                print(f"Skipping {pdf_file.name} - txt file already exists")
+            
+            # Read existing txt file for sampling
+            with open(txt_file, "r", encoding="utf-8") as f:
+                text = f.read()
+        else:
+            if verbose:
+                print(f"Processing {pdf_file.name}...")
 
-        # Save as txt file if requested
-        if save_txt_files:
-            txt_file = pdf_file.with_suffix(".txt")
-            with open(txt_file, "w", encoding="utf-8") as f:
-                f.write(text)
+            # Extract text
+            text = extract_text_from_pdf(pdf_file)
+            if not text.strip():
+                if verbose:
+                    print(f"Warning: No text extracted from {pdf_file.name}")
+                continue
+
+            # Save as txt file if requested
+            if save_txt_files:
+                with open(txt_file, "w", encoding="utf-8") as f:
+                    f.write(text)
 
         # Sample tokens
         sampled_text = sample_tokens(text, n_tokens)
@@ -124,17 +302,17 @@ def process_pdfs_and_sample(
             break
 
     # Combine sampled text
-    combined_text = f"# Sampled Text from {len(results)} PDF Files\n"
+    combined_text = ""
     for result in results:
-        combined_text += f"## FILE: {result['filename']}\n"
-        combined_text += "## \n"
+        combined_text += f"[{result['filename']}]\n"
         combined_text += result["sampled_text"]
-        combined_text += "\n##" + "\n\n"
+        combined_text += "\n\n"
 
     if verbose:
         print("\nProcessing complete!")
         print(f"Processed {len(results)} files")
         print(f"Total tokens used: {total_tokens_used}")
+        print(f"Tokens in combined text: {count_tokens(combined_text)}")
 
     return combined_text
 

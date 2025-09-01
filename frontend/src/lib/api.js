@@ -30,6 +30,22 @@ export const apiService = {
     return response.data;
   },
 
+  async extractDocuments(llm = null, corpusName = null) {
+    const requestData = {};
+    if (llm) requestData.llm = llm;
+    if (corpusName) requestData.corpus_name = corpusName;
+    const response = await api.post('/extract-documents', requestData);
+    return response.data;
+  },
+
+  async sampleDocuments(options = {}, llm = null, corpusName = null) {
+    const requestData = { ...options };
+    if (llm) requestData.llm = llm;
+    if (corpusName) requestData.corpus_name = corpusName;
+    const response = await api.post('/sample-documents', requestData);
+    return response.data;
+  },
+
   async processDocuments(options = {}, llm = null, corpusName = null) {
     const requestData = { ...options };
     if (llm) requestData.llm = llm;

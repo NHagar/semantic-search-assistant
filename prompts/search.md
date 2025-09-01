@@ -14,15 +14,15 @@ INSTRUCTIONS:
 - Search for background context, counterarguments, recent developments, and edge cases
 - Based on initial results, conduct extensive additional targeted searches as needed
 - Gather comprehensive information to address all sub-objectives through multiple search iterations
-- ALWAYS cite your sources using the citation_key from search results in square brackets (e.g., [a1b2c3:0])
+- ALWAYS cite your sources using the citation_key from search results in square brackets (e.g., [36ae51:0])
 - Include citations immediately after any claim, fact, or direct reference to source material
 - Synthesize findings into the required output structure
 
 CITATION FORMAT:
 - Use square brackets with the citation key: [citation_key]
-- Example: "Energy consumption varies significantly across models [a1b2c3:0]."
+- Example: "Energy consumption varies significantly across models [0e8790:0]."
 - Place citations after the relevant statement, before punctuation
-- Multiple sources: [a1b2c3:0][b4e5f6:2]
+- Multiple sources: [15e60a:2][7aa4eb:1]
 
 Begin by conducting your searches, then provide the final report in the exact structure specified above.
 

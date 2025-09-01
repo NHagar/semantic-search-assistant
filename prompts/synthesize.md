@@ -6,7 +6,7 @@ You will combine search results into one report for the user.
    - Search goal
    - Summary
    - Details
-   - Citations in square brackets (e.g., [a1b2c3:0])
+   - Citations in square brackets (e.g., [7aa4eb:1])
 
 ## Your Job: Write One Big Report
 
@@ -47,10 +47,11 @@ Format:
 - ALWAYS preserve citations from search results in square brackets: [citation_key]
 - When combining information from multiple sources, include all relevant citations
 - Place citations immediately after claims, before punctuation
-- Example: "Energy usage varies significantly [a1b2c3:0][d4e5f6:1]."
+- Example: "Energy usage varies significantly [7aa4eb:1][0e8790:7]."
 
 ### Step 3: Check Your Work
 Before finishing, make sure:
 - Your report answers the user's original request
 - You used facts from the search results
 - You have all 3 parts (A, B, C)
+- Every claim has a valid citation

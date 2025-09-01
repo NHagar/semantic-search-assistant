@@ -14,7 +14,6 @@
   // Components
   import ConfigurationPanel from "./lib/ConfigurationPanel.svelte";
   import FileUpload from "./lib/FileUpload.svelte";
-  import DocumentProcessor from "./lib/DocumentProcessor.svelte";
   import DocumentDescription from "./lib/DocumentDescription.svelte";
   import SearchPlans from "./lib/SearchPlans.svelte";
   import SearchExecution from "./lib/SearchExecution.svelte";
@@ -100,13 +99,8 @@
     }
   }
 
-  function handleFilesUploaded(event) {
-    console.log("Files uploaded:", event.detail);
-    nextStep();
-  }
-
-  function handleDocumentsProcessed(event) {
-    console.log("Documents processed:", event.detail);
+  function handleDocumentsExtracted(event) {
+    console.log("Documents extracted:", event.detail);
     nextStep();
   }
 
@@ -305,8 +299,7 @@
           <ConfigurationPanel />
           
           {#if !resuming}
-            <FileUpload on:uploaded={handleFilesUploaded} />
-            <DocumentProcessor on:processed={handleDocumentsProcessed} />
+            <FileUpload on:extracted={handleDocumentsExtracted} />
           {:else}
             <div class="resume-info">
               <h4>Project Status</h4>

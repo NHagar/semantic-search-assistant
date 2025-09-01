@@ -8,10 +8,20 @@ from sentence_transformers import SentenceTransformer
 
 
 class VectorDB:
-    def __init__(self, data_dir: str = "data", collection_name: str = "documents"):
+    def __init__(self, data_dir: str = "data", collection_name: str = "documents", corpus_name: str = ""):
         self.data_dir = Path(data_dir)
         self.collection_name = collection_name
-        self.chroma_client = chromadb.PersistentClient(path="chroma_db")
+        self.corpus_name = corpus_name
+        
+        # Create corpus-specific database path
+        corpus_name = corpus_name if corpus_name else "default"
+        safe_corpus = "".join(
+            c if c.isalnum() or c in ("-", "_") else "_" for c in corpus_name
+        )
+        db_path = Path("chroma_dbs") / safe_corpus
+        db_path.mkdir(parents=True, exist_ok=True)
+        
+        self.chroma_client = chromadb.PersistentClient(path=str(db_path))
         self.embedder = SentenceTransformer(
             "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
         )
@@ -244,7 +254,7 @@ class VectorDB:
 
 def main():
     """Example usage of the VectorDB class."""
-    db = VectorDB()
+    db = VectorDB(corpus_name="default")
 
     # Show current database stats
     stats = db.get_collection_stats()

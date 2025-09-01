@@ -11,6 +11,8 @@
   let generating = false;
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
+  let nTokens = 100;
+  let sampling = false;
   
   // Subscribe to store changes
   documentDescription.subscribe(value => {
@@ -41,7 +43,15 @@
     setLoading(true);
     
     try {
-      const result = await apiService.compressDocuments(null, llm, corpus);
+      // First sample documents with the token budget
+      sampling = true;
+      const sampleResult = await apiService.sampleDocuments({
+        n_tokens: nTokens
+      }, llm, corpus);
+      sampling = false;
+      
+      // Then compress the sampled content
+      const result = await apiService.compressDocuments(sampleResult.content, llm, corpus);
       description = result.content;
       documentDescription.set(result.content);
       dispatch('generated', result);
@@ -50,6 +60,7 @@
       setError('Failed to generate description: ' + err.message);
     } finally {
       generating = false;
+      sampling = false;
       setLoading(false);
     }
   }
@@ -89,8 +100,10 @@
           on:click={generateDescription}
           disabled={generating}
         >
-          {#if generating}
-            Generating...
+          {#if sampling}
+            Sampling documents...
+          {:else if generating}
+            Generating description...
           {:else}
             Generate Description
           {/if}
@@ -101,13 +114,30 @@
       {:else}
         <button class="edit-btn" on:click={startEditing}>Edit</button>
         <button class="regenerate-btn" on:click={generateDescription} disabled={generating}>
-          {#if generating}
-            Regenerating...
+          {#if sampling}
+            Sampling documents...
+          {:else if generating}
+            Regenerating description...
           {:else}
             Regenerate
           {/if}
         </button>
       {/if}
+    </div>
+  </div>
+
+  <div class="settings">
+    <div class="setting-group">
+      <label for="nTokens">Tokens per document:</label>
+      <input 
+        id="nTokens"
+        type="number" 
+        bind:value={nTokens} 
+        min="10" 
+        max="1000"
+        disabled={generating}
+      />
+      <small>Number of tokens to sample from each document when generating description</small>
     </div>
   </div>
 
@@ -269,5 +299,49 @@
   .empty-state p {
     margin: 0;
     font-size: 14px;
+  }
+
+  .settings {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+
+  .setting-group {
+    margin-bottom: 16px;
+  }
+
+  .setting-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .setting-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .setting-group input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .setting-group input:disabled {
+    background-color: #f5f5f5;
+    cursor: not-allowed;
+  }
+
+  .setting-group small {
+    display: block;
+    margin-top: 4px;
+    color: #666;
+    font-size: 12px;
   }
 </style>

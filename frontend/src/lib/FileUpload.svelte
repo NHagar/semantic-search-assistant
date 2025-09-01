@@ -1,13 +1,20 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { uploadedFiles, setError, setLoading } from './stores.js';
+  import { uploadedFiles, setError, setLoading, selectedLLM, corpusName } from './stores.js';
 
   const dispatch = createEventDispatcher();
   
   let fileInput;
   let dragActive = false;
   let files = [];
+  let processing = false;
+  let llm = 'qwen/qwen3-14b';
+  let corpus = '';
+
+  // Subscribe to store values
+  selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
+  corpusName.subscribe(value => { corpus = value || ''; });
 
   function handleFileSelect(event) {
     const selectedFiles = Array.from(event.target.files);
@@ -43,20 +50,28 @@
     uploadedFiles.set(files);
   }
 
-  async function uploadFiles() {
+  async function uploadAndExtractFiles() {
     if (files.length === 0) {
       setError('Please select at least one PDF file');
       return;
     }
 
+    processing = true;
     setLoading(true);
+    
     try {
-      const result = await apiService.uploadFiles(files);
-      dispatch('uploaded', result);
+      // First upload the files
+      const uploadResult = await apiService.uploadFiles(files);
+      
+      // Then extract them to txt files
+      const extractResult = await apiService.extractDocuments(llm, corpus);
+      
+      dispatch('extracted', { upload: uploadResult, extract: extractResult });
       setError(null);
     } catch (err) {
-      setError('Failed to upload files: ' + err.message);
+      setError('Failed to upload and extract files: ' + err.message);
     } finally {
+      processing = false;
       setLoading(false);
     }
   }
@@ -114,8 +129,12 @@
         </div>
       {/each}
       
-      <button class="upload-btn" on:click={uploadFiles}>
-        Upload {files.length} file{files.length !== 1 ? 's' : ''}
+      <button class="upload-btn" on:click={uploadAndExtractFiles} disabled={processing}>
+        {#if processing}
+          Extracting text from {files.length} file{files.length !== 1 ? 's' : ''}...
+        {:else}
+          Upload & Extract {files.length} file{files.length !== 1 ? 's' : ''}
+        {/if}
       </button>
     </div>
   {/if}
@@ -231,7 +250,13 @@
     width: 100%;
   }
 
-  .upload-btn:hover {
+  .upload-btn:hover:not(:disabled) {
     background: #45a049;
   }
+
+  .upload-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+
 </style>

@@ -97,6 +97,7 @@ def upload_files():
 
     files = request.files.getlist("files")
     uploaded_files = []
+    skipped_files = []
 
     # Ensure data directory exists
     data_dir = Path("data")
@@ -109,12 +110,65 @@ def upload_files():
         if file and file.filename and file.filename.lower().endswith(".pdf"):
             filename = secure_filename(file.filename)
             filepath = data_dir / filename
+            
+            # Check if file already exists
+            if filepath.exists():
+                skipped_files.append(filename)
+                continue
+            
             file.save(str(filepath))
             uploaded_files.append(filename)
 
+    message_parts = []
+    if uploaded_files:
+        message_parts.append(f"Uploaded {len(uploaded_files)} files")
+    if skipped_files:
+        message_parts.append(f"Skipped {len(skipped_files)} existing files")
+    
+    message = ", ".join(message_parts) if message_parts else "No new files to upload"
+
     return jsonify(
-        {"message": f"Uploaded {len(uploaded_files)} files", "files": uploaded_files}
+        {
+            "message": message, 
+            "files": uploaded_files,
+            "skipped": skipped_files
+        }
     )
+
+
+@app.route("/api/extract-documents", methods=["POST"])
+def extract_documents():
+    """Extract text from PDF documents to txt files."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        result = api.extract_documents(verbose=False)
+        return jsonify(
+            {"message": "Documents extracted successfully", "files": result}
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sample-documents", methods=["POST"])
+def sample_documents():
+    """Sample tokens from existing txt files."""
+    data = request.get_json() or {}
+    n_tokens = data.get("n_tokens", 100)
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        result = api.sample_documents(n_tokens=n_tokens, verbose=False)
+        return jsonify(
+            {"message": "Documents sampled successfully", "content": result}
+        )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/process-documents", methods=["POST"])
@@ -123,7 +177,6 @@ def process_documents():
     data = request.get_json() or {}
 
     n_tokens = data.get("n_tokens", 100)
-    token_budget = data.get("token_budget", 6500)
     llm = data.get("llm", "qwen/qwen3-14b")
     corpus_name = data.get("corpus_name", "")
 
@@ -131,7 +184,6 @@ def process_documents():
         api = get_api(llm=llm, corpus_name=corpus_name)
         result = api.process_documents(
             n_tokens=n_tokens,
-            token_budget=token_budget,
             save_txt_files=True,
             verbose=False,
         )

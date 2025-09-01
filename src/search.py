@@ -10,7 +10,7 @@ from .vector_db import VectorDB
 # Initialize components
 search_plans = list(Path(".").glob("search_plan_*.txt"))
 client = OpenAI(base_url="http://localhost:1234/v1", api_key="lm_studio")
-db = VectorDB()
+db = VectorDB(corpus_name="default")
 with open("prompts/search.md", "r") as f:
     search_prompt = f.read()
 
@@ -80,11 +80,12 @@ class VectorSearchTool:
                 formatted_results.append(
                     {
                         "rank": i,
-                        "filename": result["filename"],
-                        "chunk_id": result["chunk_id"],
+                        # "filename": result["filename"],
+                        # "chunk_id": result["chunk_id"],
                         "similarity_score": f"{result.get('similarity', 0):.4f}",
                         "content": result["content"],
-                        "content_length": len(result["content"]),
+                        "citation_key": result["citation_key"],
+                        # "content_length": len(result["content"]),
                     }
                 )
 
