@@ -165,14 +165,17 @@ class SearchPlan:
 class SearchAgent:
     """Agent that autonomously executes search plans using the vector search tool."""
 
-    def __init__(self, vector_db: VectorDB, openai_client: OpenAI):
+    def __init__(
+        self, vector_db: VectorDB, openai_client: OpenAI, build_db: bool = True
+    ):
         self.db = vector_db
         self.client = openai_client
         self.search_tool = VectorSearchTool(vector_db)
 
-        # Build/update database on initialization
-        print("Initializing vector database...")
-        self.db.build_database(chunk_size=1024, overlap=20)
+        # Only build database if explicitly requested (for backward compatibility)
+        if build_db:
+            print("Initializing vector database...")
+            self.db.build_database(chunk_size=1024, overlap=20)
 
     def get_available_tools(self) -> List[Dict[str, Any]]:
         """Get list of available tools for function calling."""
@@ -267,9 +270,21 @@ class SearchAgent:
             for iteration in range(max_iterations):
                 print(f"  Iteration {iteration + 1}/{max_iterations}")
 
-                response = self.client.chat.completions.create(
-                    model=model, messages=messages, tools=tools, tool_choice="auto"
-                )
+                if model == "openai/gpt-oss-20b":
+                    response = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        tools=tools,
+                        tool_choice="auto",
+                        reasoning_effort="high",
+                    )
+                else:
+                    response = self.client.chat.completions.create(
+                        model=model,
+                        messages=messages,
+                        tools=tools,
+                        tool_choice="auto",
+                    )
 
                 assistant_message = response.choices[0].message
 
@@ -476,7 +491,7 @@ Guidelines:
 
 def execute_all_search_plans():
     """Execute all available search plans and save reports."""
-    agent = SearchAgent(db, client)
+    agent = SearchAgent(db, client, build_db=False)
 
     print(f"Found {len(search_plans)} search plan files")
 

@@ -130,6 +130,14 @@ export const apiService = {
     return response.data;
   },
 
+  async regenerateReport(reportId, llm = null, corpusName = null) {
+    const requestData = { report_id: reportId };
+    if (llm) requestData.llm = llm;
+    if (corpusName) requestData.corpus_name = corpusName;
+    const response = await api.post('/regenerate-report', requestData);
+    return response.data;
+  },
+
   // Final report
   async synthesizeFinalReport(userQuery, llm = null, corpusName = null) {
     const requestData = { user_query: userQuery };

@@ -94,17 +94,26 @@ class SemanticSearchAPI:
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
-    def extract_documents(self, verbose: bool = True) -> List[Dict[str, Any]]:
+    def extract_documents(self, verbose: bool = True, chunk_size: int = 1024, overlap: int = 20) -> List[Dict[str, Any]]:
         """
-        Extract text from PDF documents to txt files.
+        Extract text from PDF documents to txt files and build vector database.
 
         Args:
             verbose: Whether to print progress messages
+            chunk_size: Chunk size for vector database
+            overlap: Overlap size for chunking
 
         Returns:
             List of extracted file metadata
         """
-        return extract_pdfs_to_txt(data_dir=self.data_dir, verbose=verbose)
+        result = extract_pdfs_to_txt(data_dir=self.data_dir, verbose=verbose)
+        
+        # Build/update vector database after extraction
+        if verbose:
+            print("Building vector database...")
+        self.vector_db.build_database(chunk_size=chunk_size, overlap=overlap)
+        
+        return result
 
     def sample_documents(
         self,
@@ -188,9 +197,9 @@ class SemanticSearchAPI:
             documents = self.sample_documents()
 
         if output_file is None:
-            output_file = self._get_output_dir() / "doc_report.txt"
+            output_file_path = self._get_output_dir() / "doc_report.txt"
         else:
-            output_file = self._get_output_dir() / output_file
+            output_file_path = self._get_output_dir() / output_file
 
         with open(prompt_file, "r") as f:
             prompt = f.read()
@@ -208,7 +217,7 @@ class SemanticSearchAPI:
         if result is None:
             raise ValueError("Received empty response from LLM")
 
-        with open(output_file, "w") as f:
+        with open(output_file_path, "w") as f:
             f.write(result)
 
         return result
@@ -303,25 +312,19 @@ class SemanticSearchAPI:
     def execute_search_plans(
         self,
         search_plans: Optional[List[str]] = None,
-        chunk_size: int = 1024,
-        overlap: int = 20,
     ) -> List[str]:
         """
         Execute search plans and generate reports.
 
         Args:
             search_plans: List of search plans. If None, loads from files.
-            chunk_size: Chunk size for vector database
-            overlap: Overlap size for chunking
 
         Returns:
             List of generated reports
         """
         if self.search_agent is None:
-            self.search_agent = SearchAgent(self.vector_db, self.client)
-
-        # Build vector database if needed
-        self.vector_db.build_database(chunk_size=chunk_size, overlap=overlap)
+            # Create search agent without triggering DB build
+            self.search_agent = SearchAgent(self.vector_db, self.client, build_db=False)
 
         output_dir = self._get_output_dir()
 
@@ -468,11 +471,11 @@ class SemanticSearchAPI:
         final_report = response.choices[0].message.content
 
         if output_file is None:
-            output_file = output_dir / "final_report.md"
+            output_file_path = output_dir / "final_report.md"
         else:
-            output_file = output_dir / output_file
+            output_file_path = output_dir / output_file
 
-        with open(output_file, "w") as f:
+        with open(output_file_path, "w") as f:
             f.write(final_report)
 
         return final_report
@@ -506,7 +509,7 @@ class SemanticSearchAPI:
         self.generate_search_plans()
 
         print("Step 4: Executing search plans...")
-        self.execute_search_plans(chunk_size=chunk_size, overlap=overlap)
+        self.execute_search_plans()
 
         print("Step 5: Evaluating and synthesizing results...")
         final_report = self.evaluate_and_synthesize(synthesis_query)
@@ -525,7 +528,7 @@ class SemanticSearchAPI:
             AI assistant's response based on document search
         """
         if self.search_agent is None:
-            self.search_agent = SearchAgent(self.vector_db, self.client)
+            self.search_agent = SearchAgent(self.vector_db, self.client, build_db=False)
 
         return self.search_agent.chat(user_message, model=self.model)
 
@@ -541,6 +544,20 @@ class SemanticSearchAPI:
             List of search results with metadata
         """
         return self.vector_db.semantic_search(query, n_results=n_results)
+
+    def build_vector_database(self, chunk_size: int = 1024, overlap: int = 20) -> Dict[str, Any]:
+        """
+        Build or update the vector database from existing txt files.
+
+        Args:
+            chunk_size: Chunk size for vector database
+            overlap: Overlap size for chunking
+
+        Returns:
+            Dictionary with database statistics after building
+        """
+        self.vector_db.build_database(chunk_size=chunk_size, overlap=overlap)
+        return self.vector_db.get_collection_stats()
 
     def get_database_stats(self) -> Dict[str, Any]:
         """

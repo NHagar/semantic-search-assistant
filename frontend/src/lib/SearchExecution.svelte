@@ -49,13 +49,9 @@
 
     // Add initial log entry
     addLog('info', 'Starting search plan execution...');
-    addLog('info', `Configuration: chunk_size=${chunkSize}, overlap=${overlap}`);
     
     try {
-      const result = await apiService.executeSearchPlans({
-        chunk_size: chunkSize,
-        overlap: overlap
-      }, llm, corpus);
+      const result = await apiService.executeSearchPlans({}, llm, corpus);
       
       addLog('success', `Execution completed! Generated ${result.reports.length} reports`);
       
@@ -68,6 +64,33 @@
     } catch (err) {
       addLog('error', `Execution failed: ${err.message}`);
       setError('Failed to execute search plans: ' + err.message);
+    } finally {
+      executing = false;
+      setLoading(false);
+    }
+  }
+
+  async function reExecuteSearchPlans() {
+    executing = true;
+    executionLogs = [];
+    setLoading(true);
+
+    // Add initial log entry
+    addLog('info', 'Re-executing search plans...');
+    
+    try {
+      const result = await apiService.executeSearchPlans({}, llm, corpus);
+      
+      addLog('success', `Re-execution completed! Generated ${result.reports.length} reports`);
+      
+      // Load the detailed reports
+      await loadExistingReports();
+      
+      dispatch('completed', result);
+      setError(null);
+    } catch (err) {
+      addLog('error', `Re-execution failed: ${err.message}`);
+      setError('Failed to re-execute search plans: ' + err.message);
     } finally {
       executing = false;
       setLoading(false);
@@ -139,46 +162,33 @@
 <div class="search-execution">
   <div class="header">
     <h3>Search Execution</h3>
-    {#if executionComplete}
-      <span class="status-badge success">Completed</span>
-    {:else if executing}
-      <span class="status-badge running">Running</span>
-    {:else}
-      <span class="status-badge pending">Ready</span>
-    {/if}
+    <div class="header-right">
+      {#if executionComplete}
+        <button 
+          class="re-execute-btn" 
+          on:click={reExecuteSearchPlans}
+          disabled={executing}
+          title="Re-run search execution with existing plans"
+        >
+          {#if executing}
+            Re-executing...
+          {:else}
+            Re-execute
+          {/if}
+        </button>
+        <span class="status-badge success">Completed</span>
+      {:else if executing}
+        <span class="status-badge running">Running</span>
+      {:else}
+        <span class="status-badge pending">Ready</span>
+      {/if}
+    </div>
   </div>
 
   {#if !executionComplete}
     <div class="execution-settings">
-      <h4>Vector Database Settings</h4>
-      
-      <div class="settings-row">
-        <div class="setting-group">
-          <label for="chunkSize">Chunk Size:</label>
-          <input 
-            id="chunkSize"
-            type="number" 
-            bind:value={chunkSize} 
-            min="256" 
-            max="4096"
-            disabled={executing}
-          />
-          <small>Size of text chunks for vector search</small>
-        </div>
-
-        <div class="setting-group">
-          <label for="overlap">Overlap:</label>
-          <input 
-            id="overlap"
-            type="number" 
-            bind:value={overlap} 
-            min="0" 
-            max="100"
-            disabled={executing}
-          />
-          <small>Overlap between adjacent chunks</small>
-        </div>
-      </div>
+      <h4>Search Plan Execution</h4>
+      <p class="info-text">Execute your search plans to generate comprehensive reports. Vector database operations will use existing indexed documents.</p>
 
       <button 
         class="execute-btn" 
@@ -292,6 +302,12 @@
     color: #333;
   }
 
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   .status-badge {
     padding: 4px 12px;
     border-radius: 16px;
@@ -327,6 +343,13 @@
   .execution-settings h4 {
     margin: 0 0 16px 0;
     color: #333;
+  }
+
+  .info-text {
+    margin: 0 0 20px 0;
+    color: #666;
+    font-size: 14px;
+    line-height: 1.4;
   }
 
   .settings-row {
@@ -380,6 +403,26 @@
   }
 
   .execute-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+
+  .re-execute-btn {
+    background: #ff9800;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .re-execute-btn:hover:not(:disabled) {
+    background: #f57c00;
+  }
+
+  .re-execute-btn:disabled {
     background: #ccc;
     cursor: not-allowed;
   }

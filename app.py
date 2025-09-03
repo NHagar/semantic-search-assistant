@@ -138,16 +138,18 @@ def upload_files():
 
 @app.route("/api/extract-documents", methods=["POST"])
 def extract_documents():
-    """Extract text from PDF documents to txt files."""
+    """Extract text from PDF documents to txt files and build vector database."""
     data = request.get_json() or {}
     llm = data.get("llm", "qwen/qwen3-14b")
     corpus_name = data.get("corpus_name", "")
+    chunk_size = data.get("chunk_size", 1024)
+    overlap = data.get("overlap", 20)
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        result = api.extract_documents(verbose=False)
+        result = api.extract_documents(verbose=False, chunk_size=chunk_size, overlap=overlap)
         return jsonify(
-            {"message": "Documents extracted successfully", "files": result}
+            {"message": "Documents extracted and vector database built successfully", "files": result}
         )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -321,14 +323,12 @@ def update_search_plan():
 def execute_search_plans():
     """Execute search plans and generate reports."""
     data = request.get_json() or {}
-    chunk_size = data.get("chunk_size", 1024)
-    overlap = data.get("overlap", 20)
     llm = data.get("llm", "qwen/qwen3-14b")
     corpus_name = data.get("corpus_name", "")
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        reports = api.execute_search_plans(chunk_size=chunk_size, overlap=overlap)
+        reports = api.execute_search_plans()
         return jsonify(
             {"message": f"Generated {len(reports)} reports", "reports": reports}
         )
@@ -380,6 +380,55 @@ def update_report():
         with open(report_file, "w") as f:
             f.write(data["content"])
         return jsonify({"message": "Report updated successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/regenerate-report", methods=["POST"])
+def regenerate_report():
+    """Regenerate a specific report from its search plan."""
+    data = request.get_json()
+    if not data or "report_id" not in data:
+        return jsonify({"error": "Report ID is required"}), 400
+
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+    report_id = data["report_id"]
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        output_dir = api._get_output_dir()
+        
+        # Find the corresponding search plan file
+        # report_id format: "report_search_plan_X"
+        # search plan format: "search_plan_X"
+        plan_number = report_id.replace("report_search_plan_", "")
+        plan_file = output_dir / f"search_plan_{plan_number}.txt"
+        
+        if not plan_file.exists():
+            return jsonify({"error": f"Search plan file not found: {plan_file.name}"}), 404
+        
+        # Read the search plan
+        with open(plan_file, "r") as f:
+            search_plan_text = f.read()
+        
+        # Initialize search agent if needed
+        if api.search_agent is None:
+            from src.search import SearchAgent
+            api.search_agent = SearchAgent(api.vector_db, api.client, build_db=False)
+        
+        # Execute the search plan to regenerate the report
+        new_report = api.search_agent.execute_search_plan(search_plan_text, model=llm)
+        
+        # Save the regenerated report
+        report_file = output_dir / f"{report_id}.txt"
+        with open(report_file, "w") as f:
+            f.write(new_report)
+        
+        return jsonify({
+            "message": "Report regenerated successfully",
+            "content": new_report
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -439,6 +488,25 @@ def update_final_report():
         with open(final_report_file, "w") as f:
             f.write(data["content"])
         return jsonify({"message": "Final report updated successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/build-vector-database", methods=["POST"])
+def build_vector_database():
+    """Build or update the vector database."""
+    data = request.get_json() or {}
+    chunk_size = data.get("chunk_size", 1024)
+    overlap = data.get("overlap", 20)
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        stats = api.build_vector_database(chunk_size=chunk_size, overlap=overlap)
+        return jsonify(
+            {"message": "Vector database built successfully", "stats": stats}
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

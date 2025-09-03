@@ -142,6 +142,11 @@
     // Stay on the same step
   }
 
+  function handleReportRegenerated(event) {
+    console.log("Report regenerated:", event.detail);
+    // Stay on the same step
+  }
+
   function handleSynthesizeReport() {
     nextStep(); // Go to final report
   }
@@ -388,6 +393,7 @@
           </p>
           <ReportsViewer
             on:saved={handleReportSaved}
+            on:regenerated={handleReportRegenerated}
             on:synthesize={handleSynthesizeReport}
           />
           <div class="navigation-buttons">

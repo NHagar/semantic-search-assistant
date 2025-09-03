@@ -10,6 +10,7 @@
   let selectedReport = null;
   let editingReport = null;
   let editContent = '';
+  let regeneratingReport = null;
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
 
@@ -102,6 +103,33 @@
   function cancelEdit() {
     editingReport = null;
     editContent = '';
+  }
+
+  async function regenerateReport() {
+    if (!selectedReport) return;
+    
+    try {
+      setLoading(true);
+      regeneratingReport = selectedReport.id;
+      
+      const result = await apiService.regenerateReport(selectedReport.id, llm, corpus);
+      
+      // Update local state with regenerated content
+      reportsList = reportsList.map(r => 
+        r.id === selectedReport.id ? { ...r, content: result.content } : r
+      );
+      reports.set(reportsList);
+      selectedReport = { ...selectedReport, content: result.content };
+      
+      regeneratingReport = null;
+      setError(null);
+      dispatch('regenerated', { reportId: selectedReport.id, content: result.content });
+    } catch (err) {
+      regeneratingReport = null;
+      setError('Failed to regenerate report: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function getReportMainContent(fullContent) {
@@ -214,6 +242,13 @@
                 <button class="cancel-btn" on:click={cancelEdit}>Cancel</button>
               {:else}
                 <button class="edit-btn" on:click={startEditing}>Edit Report</button>
+                <button 
+                  class="regenerate-btn" 
+                  on:click={regenerateReport}
+                  disabled={regeneratingReport === selectedReport.id}
+                >
+                  {regeneratingReport === selectedReport.id ? 'Regenerating...' : 'Regenerate'}
+                </button>
               {/if}
             </div>
           </div>
@@ -468,6 +503,21 @@
 
   .cancel-btn:hover {
     background: #d32f2f;
+  }
+
+  .regenerate-btn {
+    background: #ff9800;
+    color: white;
+    border-color: #ff9800;
+  }
+
+  .regenerate-btn:hover:not(:disabled) {
+    background: #f57c00;
+  }
+
+  .regenerate-btn:disabled {
+    background: #ffcc80;
+    cursor: not-allowed;
   }
 
   .report-tabs {
