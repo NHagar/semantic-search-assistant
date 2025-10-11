@@ -1,0 +1,2 @@
+*.pdf filter=lfs diff=lfs merge=lfs -text
+newsworthiness-test-cases/sfpress_radiation/docs/*.pdf filter=lfs diff=lfs merge=lfs -text
