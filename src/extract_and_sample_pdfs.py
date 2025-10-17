@@ -41,22 +41,28 @@ def sample_tokens(text, n_tokens, encoding_name="cl100k_base"):
     return encoding.decode(sampled_tokens)
 
 
-def extract_pdfs_to_txt(data_dir, verbose=True):
+def extract_pdfs_to_txt(data_dir, output_dir=None, verbose=True):
     """
     Extract text from PDFs and save as txt files (no token sampling).
 
     Args:
         data_dir: Path to directory containing PDF files
+        output_dir: Path to directory for output txt files (defaults to same as data_dir)
         verbose: Whether to print progress messages
 
     Returns:
         list: List of extracted files with metadata
     """
     data_dir = Path(data_dir)
+    output_dir = Path(output_dir) if output_dir else data_dir
+
     if not data_dir.exists():
         if verbose:
             print(f"Error: Directory {data_dir} does not exist")
         return []
+
+    # Ensure output directory exists
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Find all PDF files
     pdf_files = list(data_dir.glob("*.pdf"))
@@ -72,13 +78,14 @@ def extract_pdfs_to_txt(data_dir, verbose=True):
     results = []
 
     for pdf_file in sorted(pdf_files):
-        txt_file = pdf_file.with_suffix(".txt")
-        
+        # Output txt file in the output directory
+        txt_file = output_dir / pdf_file.with_suffix(".txt").name
+
         # Check if txt file already exists
         if txt_file.exists():
             if verbose:
                 print(f"Skipping {pdf_file.name} - txt file already exists")
-            
+
             # Read existing txt file to get stats
             with open(txt_file, "r", encoding="utf-8") as f:
                 text = f.read()

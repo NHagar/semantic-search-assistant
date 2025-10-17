@@ -95,8 +95,14 @@
   async function deleteProject(project, event) {
     event.stopPropagation();
     if (confirm(`Are you sure you want to delete the project "${project.corpus_name}" (${project.model_name})?\n\nThis will remove all associated files and cannot be undone.`)) {
-      // TODO: Implement delete endpoint
-      alert('Delete functionality coming soon');
+      try {
+        await apiService.deleteProject(project.model_name, project.corpus_name);
+        // Reload the project list
+        await loadProjects();
+      } catch (err) {
+        alert('Failed to delete project: ' + err.message);
+        console.error('Error deleting project:', err);
+      }
     }
   }
 </script>

@@ -177,4 +177,17 @@ export const apiService = {
     const response = await api.get('/existing-combinations');
     return response.data;
   },
+
+  // Project management
+  async cleanupWorkingFiles(llm, corpusName) {
+    const requestData = { llm, corpus_name: corpusName };
+    const response = await api.post('/cleanup-working-files', requestData);
+    return response.data;
+  },
+
+  async deleteProject(llm, corpusName) {
+    const requestData = { llm, corpus_name: corpusName };
+    const response = await api.post('/delete-project', requestData);
+    return response.data;
+  },
 };

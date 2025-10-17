@@ -18,6 +18,7 @@ from .extract_and_sample_pdfs import (
     process_pdfs_and_sample,
     sample_from_txt_files,
 )
+from .project_manager import ProjectManager
 from .search import SearchAgent
 from .vector_db import VectorDB
 
@@ -69,30 +70,40 @@ class SemanticSearchAPI:
         Args:
             openai_base_url: Base URL for OpenAI-compatible API
             openai_api_key: API key for the service
-            data_dir: Directory containing PDF/text documents
+            data_dir: Directory containing PDF/text documents (legacy, will be deprecated)
             model: Model name to use for LLM operations
             corpus_name: Name of the document corpus (used for organizing outputs)
         """
         self.client = OpenAI(base_url=openai_base_url, api_key=openai_api_key)
-        self.data_dir = data_dir
         self.model = model
-        self.corpus_name = corpus_name
-        self.vector_db = VectorDB(data_dir=data_dir, corpus_name=corpus_name)
+        self.corpus_name = corpus_name if corpus_name else "default"
+
+        # Initialize ProjectManager for new architecture
+        self.project_manager = ProjectManager(self.corpus_name, model)
+        self.project_manager.ensure_directories()
+
+        # Create metadata file to preserve original names
+        ProjectManager.create_metadata_file(self.corpus_name, model)
+
+        # Use project-specific directories
+        self.data_dir = str(self.project_manager.txt_dir)  # For txt files
+        self.pdfs_dir = str(self.project_manager.pdfs_dir)  # For PDFs
+
+        # Initialize VectorDB with ProjectManager
+        self.vector_db = VectorDB(
+            corpus_name=self.corpus_name,
+            model_name=model,
+            project_manager=self.project_manager
+        )
         self.search_agent = None
 
     def _get_output_dir(self) -> Path:
         """Get the output directory path based on corpus name and model."""
-        # Always use organized structure, with "default" as fallback
-        corpus_name = self.corpus_name if self.corpus_name else "default"
-        safe_corpus = "".join(
-            c if c.isalnum() or c in ("-", "_") else "_" for c in corpus_name
-        )
-        safe_model = "".join(
-            c if c.isalnum() or c in ("-", "_") else "_" for c in self.model
-        )
-        output_dir = Path("outputs") / safe_corpus / safe_model
-        output_dir.mkdir(parents=True, exist_ok=True)
-        return output_dir
+        return self.project_manager.outputs_dir
+
+    def cleanup_working_files(self) -> None:
+        """Clean up temporary working files after processing is complete."""
+        self.project_manager.cleanup_working_directory()
 
     def extract_documents(self, verbose: bool = True, chunk_size: int = 1024, overlap: int = 20) -> List[Dict[str, Any]]:
         """
@@ -106,13 +117,18 @@ class SemanticSearchAPI:
         Returns:
             List of extracted file metadata
         """
-        result = extract_pdfs_to_txt(data_dir=self.data_dir, verbose=verbose)
-        
+        # Extract PDFs from pdfs_dir to txt_dir
+        result = extract_pdfs_to_txt(
+            data_dir=self.pdfs_dir,
+            output_dir=self.data_dir,  # txt_dir
+            verbose=verbose
+        )
+
         # Build/update vector database after extraction
         if verbose:
             print("Building vector database...")
         self.vector_db.build_database(chunk_size=chunk_size, overlap=overlap)
-        
+
         return result
 
     def sample_documents(

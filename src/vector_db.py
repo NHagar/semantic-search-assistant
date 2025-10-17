@@ -1,26 +1,54 @@
 import hashlib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import chromadb
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
 
+from .project_manager import ProjectManager
+
 
 class VectorDB:
-    def __init__(self, data_dir: str = "data", collection_name: str = "documents", corpus_name: str = ""):
-        self.data_dir = Path(data_dir)
+    def __init__(
+        self,
+        data_dir: Optional[str] = None,
+        collection_name: str = "documents",
+        corpus_name: str = "",
+        model_name: str = "",
+        project_manager: Optional[ProjectManager] = None
+    ):
+        """
+        Initialize VectorDB.
+
+        Args:
+            data_dir: Legacy parameter for txt file directory (deprecated)
+            collection_name: Name of the chroma collection
+            corpus_name: Name of the corpus (used if project_manager not provided)
+            model_name: Name of the model (used if project_manager not provided)
+            project_manager: ProjectManager instance for new architecture
+        """
         self.collection_name = collection_name
         self.corpus_name = corpus_name
-        
-        # Create corpus-specific database path
-        corpus_name = corpus_name if corpus_name else "default"
-        safe_corpus = "".join(
-            c if c.isalnum() or c in ("-", "_") else "_" for c in corpus_name
-        )
-        db_path = Path("chroma_dbs") / safe_corpus
+        self.model_name = model_name
+
+        # Use ProjectManager for new architecture
+        if project_manager:
+            self.project_manager = project_manager
+            self.data_dir = self.project_manager.txt_dir
+            db_path = self.project_manager.chroma_db_dir
+        else:
+            # Legacy mode: use old directory structure
+            if data_dir:
+                self.data_dir = Path(data_dir)
+            else:
+                # Create a project manager for legacy compatibility
+                self.project_manager = ProjectManager(corpus_name, model_name)
+                self.data_dir = self.project_manager.txt_dir
+                db_path = self.project_manager.chroma_db_dir
+
         db_path.mkdir(parents=True, exist_ok=True)
-        
+
         self.chroma_client = chromadb.PersistentClient(path=str(db_path))
         self.embedder = SentenceTransformer(
             "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
