@@ -80,10 +80,10 @@ class SemanticSearchAPI:
 
         # Initialize ProjectManager for new architecture
         self.project_manager = ProjectManager(self.corpus_name, model)
-        self.project_manager.ensure_directories()
 
-        # Create metadata file to preserve original names
-        ProjectManager.create_metadata_file(self.corpus_name, model)
+        # Don't automatically create directories - let endpoints do it when needed
+        # This prevents creating empty "default" projects
+        # self.project_manager.ensure_directories()
 
         # Use project-specific directories
         self.data_dir = str(self.project_manager.txt_dir)  # For txt files

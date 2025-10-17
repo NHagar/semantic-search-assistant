@@ -94,6 +94,10 @@ def get_existing_combinations():
                 corpus_name = parts[0]
                 model_name = parts[1].replace("_", "/")
 
+            # Skip invalid projects (empty corpus or model name)
+            if not corpus_name or not model_name:
+                continue
+
             # Use ProjectManager to get project info
             pm = ProjectManager(corpus_name, model_name)
             if pm.project_dir.exists():
