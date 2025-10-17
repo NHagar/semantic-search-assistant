@@ -56,16 +56,21 @@
       return;
     }
 
+    if (!corpus) {
+      setError('No project selected. Please go back and select or create a project.');
+      return;
+    }
+
     processing = true;
     setLoading(true);
-    
+
     try {
-      // First upload the files
-      const uploadResult = await apiService.uploadFiles(files);
-      
+      // First upload the files with project parameters
+      const uploadResult = await apiService.uploadFiles(files, llm, corpus);
+
       // Then extract them to txt files
       const extractResult = await apiService.extractDocuments(llm, corpus);
-      
+
       dispatch('extracted', { upload: uploadResult, extract: extractResult });
       setError(null);
     } catch (err) {
