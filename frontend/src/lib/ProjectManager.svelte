@@ -1,7 +1,7 @@
 <script>
-  import { onMount } from 'svelte';
-  import { selectedLLM, corpusName } from './stores.js';
-  import { apiService } from './api.js';
+  import { onMount } from "svelte";
+  import { selectedLLM, corpusName } from "./stores.js";
+  import { apiService } from "./api.js";
 
   export let onProjectSelected;
 
@@ -10,22 +10,61 @@
   let error = null;
 
   // New project form
-  let newProjectName = '';
-  let newProjectLLM = 'qwen/qwen3-14b';
+  let newProjectName = "";
+  let newProjectLLM = "";
   let creatingProject = false;
 
   // Available LLM models
-  const availableLLMs = [
-    'qwen/qwen3-14b',
-    'gpt-4',
-    'gpt-3.5-turbo',
-    'claude-3-opus',
-    'claude-3-sonnet'
-  ];
+  let availableLLMs = [];
+  let loadingModels = true;
 
   onMount(async () => {
-    await loadProjects();
+    await Promise.all([
+      loadProjects(),
+      loadAvailableModels()
+    ]);
   });
+
+  async function loadAvailableModels() {
+    loadingModels = true;
+    try {
+      // Fetch models through our backend API (avoids CORS issues)
+      const response = await apiService.getAvailableModels();
+
+      if (response.models && Array.isArray(response.models) && response.models.length > 0) {
+        availableLLMs = response.models;
+
+        // Set default model if none selected
+        if (!newProjectLLM) {
+          newProjectLLM = availableLLMs[0];
+        }
+      } else {
+        // Fallback to default list if no models returned
+        console.warn('No models returned from backend, using fallback list');
+        availableLLMs = [
+          "qwen/qwen3-14b",
+          "gpt-4",
+          "gpt-3.5-turbo",
+          "claude-3-opus",
+          "claude-3-sonnet",
+        ];
+        newProjectLLM = availableLLMs[0];
+      }
+    } catch (err) {
+      console.warn('Could not fetch models from backend, using fallback list:', err);
+      // Fallback to default list if backend is not available
+      availableLLMs = [
+        "qwen/qwen3-14b",
+        "gpt-4",
+        "gpt-3.5-turbo",
+        "claude-3-opus",
+        "claude-3-sonnet",
+      ];
+      newProjectLLM = availableLLMs[0];
+    } finally {
+      loadingModels = false;
+    }
+  }
 
   async function loadProjects() {
     loading = true;
@@ -34,8 +73,8 @@
       const response = await apiService.getExistingCombinations();
       existingProjects = response.combinations || [];
     } catch (err) {
-      error = 'Failed to load projects: ' + err.message;
-      console.error('Error loading projects:', err);
+      error = "Failed to load projects: " + err.message;
+      console.error("Error loading projects:", err);
     } finally {
       loading = false;
     }
@@ -49,7 +88,7 @@
 
   function createNewProject() {
     if (!newProjectName.trim()) {
-      alert('Please enter a project name');
+      alert("Please enter a project name");
       return;
     }
 
@@ -63,7 +102,7 @@
     onProjectSelected({
       corpus_name: newProjectName.trim(),
       model_name: newProjectLLM,
-      isNew: true
+      isNew: true,
     });
 
     creatingProject = false;
@@ -71,37 +110,41 @@
 
   function getStageProgress(stages) {
     const total = 4;
-    const completed = Object.values(stages).filter(v => v).length;
+    const completed = Object.values(stages).filter((v) => v).length;
     return Math.round((completed / total) * 100);
   }
 
   function getStageText(stages) {
-    if (stages.final) return 'Completed';
-    if (stages.reports) return 'Reports generated';
-    if (stages.plans) return 'Plans created';
-    if (stages.description) return 'Description generated';
-    return 'Just started';
+    if (stages.final) return "Completed";
+    if (stages.reports) return "Reports generated";
+    if (stages.plans) return "Plans created";
+    if (stages.description) return "Description generated";
+    return "Just started";
   }
 
   function formatDate(timestamp) {
-    if (!timestamp) return 'Unknown';
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+    if (!timestamp) return "Unknown";
+    return new Date(timestamp * 1000).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   }
 
   async function deleteProject(project, event) {
     event.stopPropagation();
-    if (confirm(`Are you sure you want to delete the project "${project.corpus_name}" (${project.model_name})?\n\nThis will remove all associated files and cannot be undone.`)) {
+    if (
+      confirm(
+        `Are you sure you want to delete the project "${project.corpus_name}" (${project.model_name})?\n\nThis will remove all associated files and cannot be undone.`,
+      )
+    ) {
       try {
         await apiService.deleteProject(project.model_name, project.corpus_name);
         // Reload the project list
         await loadProjects();
       } catch (err) {
-        alert('Failed to delete project: ' + err.message);
-        console.error('Error deleting project:', err);
+        alert("Failed to delete project: " + err.message);
+        console.error("Error deleting project:", err);
       }
     }
   }
@@ -131,19 +174,38 @@
 
         <div class="form-group">
           <label for="llm-select">LLM Model</label>
-          <select id="llm-select" bind:value={newProjectLLM} disabled={creatingProject}>
-            {#each availableLLMs as llm}
-              <option value={llm}>{llm}</option>
-            {/each}
+          <select
+            id="llm-select"
+            bind:value={newProjectLLM}
+            disabled={creatingProject || loadingModels}
+          >
+            {#if loadingModels}
+              <option value="">Loading models...</option>
+            {:else if availableLLMs.length === 0}
+              <option value="">No models available</option>
+            {:else}
+              {#each availableLLMs as llm}
+                <option value={llm}>{llm}</option>
+              {/each}
+            {/if}
           </select>
+          {#if !loadingModels && availableLLMs.length === 0}
+            <small class="hint error">
+              Could not connect to LM Studio. Make sure it's running on http://localhost:1234
+            </small>
+          {:else if !loadingModels && availableLLMs.length > 0}
+            <small class="hint">
+              {availableLLMs.length} model{availableLLMs.length !== 1 ? 's' : ''} available from LM Studio
+            </small>
+          {/if}
         </div>
 
         <button
           class="create-button"
           on:click={createNewProject}
-          disabled={creatingProject || !newProjectName.trim()}
+          disabled={creatingProject || !newProjectName.trim() || !newProjectLLM || loadingModels}
         >
-          {creatingProject ? 'Creating...' : 'Create Project'}
+          {creatingProject ? "Creating..." : "Create Project"}
         </button>
       </div>
     </div>
@@ -152,7 +214,11 @@
     <div class="section existing-projects-section">
       <div class="section-header">
         <h2>Your Projects</h2>
-        <button class="refresh-button" on:click={loadProjects} disabled={loading}>
+        <button
+          class="refresh-button"
+          on:click={loadProjects}
+          disabled={loading}
+        >
           ↻ Refresh
         </button>
       </div>
@@ -206,7 +272,8 @@
                     style="width: {getStageProgress(project.stages)}%"
                   ></div>
                 </div>
-                <span class="progress-text">{getStageText(project.stages)}</span>
+                <span class="progress-text">{getStageText(project.stages)}</span
+                >
               </div>
             </div>
           {/each}
@@ -307,6 +374,16 @@
     cursor: not-allowed;
   }
 
+  .hint {
+    font-size: 0.85rem;
+    color: #666;
+    margin-top: 0.25rem;
+  }
+
+  .hint.error {
+    color: #e74c3c;
+  }
+
   .create-button {
     padding: 1rem;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -316,7 +393,9 @@
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition:
+      transform 0.2s,
+      box-shadow 0.2s;
   }
 
   .create-button:hover:not(:disabled) {

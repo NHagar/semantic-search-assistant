@@ -178,6 +178,12 @@ export const apiService = {
     return response.data;
   },
 
+  // Available models
+  async getAvailableModels() {
+    const response = await api.get('/available-models');
+    return response.data;
+  },
+
   // Project management
   async cleanupWorkingFiles(llm, corpusName) {
     const requestData = { llm, corpus_name: corpusName };

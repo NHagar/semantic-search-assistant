@@ -41,6 +41,26 @@ def health_check():
     return jsonify({"status": "healthy", "message": "Semantic Search API is running"})
 
 
+@app.route("/api/available-models", methods=["GET"])
+def get_available_models():
+    """Get list of available models from LM Studio."""
+    try:
+        import requests
+        # Try to fetch from LM Studio
+        response = requests.get("http://localhost:1234/v1/models", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data and isinstance(data["data"], list):
+                models = [model["id"] for model in data["data"]]
+                return jsonify({"models": models})
+
+        # Fallback if LM Studio is not responding properly
+        return jsonify({"models": [], "error": "Could not fetch models from LM Studio"})
+    except Exception as e:
+        # Return empty list with error message if LM Studio is not available
+        return jsonify({"models": [], "error": str(e)})
+
+
 @app.route("/api/existing-combinations", methods=["GET"])
 def get_existing_combinations():
     """Get list of existing model-corpus combinations from project structure."""
