@@ -13,6 +13,8 @@ export const resumeStages = writable({
   reports: false,
   final: false
 });
+export const projectSelected = writable(false);
+export const currentProject = writable(null);
 
 // Document state
 export const uploadedFiles = writable([]);

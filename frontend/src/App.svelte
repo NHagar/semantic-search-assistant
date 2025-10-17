@@ -6,13 +6,13 @@
     loading,
     error,
     setError,
-    isResuming,
-    resumeStages,
+    projectSelected,
+    currentProject,
   } from "./lib/stores.js";
   import { apiService } from "./lib/api.js";
 
   // Components
-  import ConfigurationPanel from "./lib/ConfigurationPanel.svelte";
+  import ProjectManager from "./lib/ProjectManager.svelte";
   import FileUpload from "./lib/FileUpload.svelte";
   import DocumentDescription from "./lib/DocumentDescription.svelte";
   import SearchPlans from "./lib/SearchPlans.svelte";
@@ -24,8 +24,8 @@
   let isLoading = false;
   let errorMessage = null;
   let apiHealthy = false;
-  let resuming = false;
-  let stages = { description: false, plans: false, reports: false, final: false };
+  let hasProjectSelected = false;
+  let project = null;
 
   // Subscribe to store changes
   currentStep.subscribe((value) => {
@@ -40,12 +40,12 @@
     errorMessage = value;
   });
 
-  isResuming.subscribe((value) => {
-    resuming = value;
+  projectSelected.subscribe((value) => {
+    hasProjectSelected = value;
   });
 
-  resumeStages.subscribe((value) => {
-    stages = value;
+  currentProject.subscribe((value) => {
+    project = value;
   });
 
   onMount(async () => {
@@ -65,25 +65,9 @@
   }
 
   function nextStep() {
-    if (resuming && currentStepValue === 0) {
-      // When resuming, jump to the next incomplete stage
-      if (!stages.description) {
-        currentStep.set(1); // Document Description
-      } else if (!stages.plans) {
-        currentStep.set(2); // Search Plans
-      } else if (!stages.reports) {
-        currentStep.set(3); // Search Execution
-      } else if (!stages.final) {
-        currentStep.set(5); // Final Report
-      } else {
-        // All stages complete, go to final report to view
-        currentStep.set(5);
-      }
-    } else {
-      // Normal linear progression
-      if (currentStepValue < steps.length - 1) {
-        currentStep.set(currentStepValue + 1);
-      }
+    // Normal linear progression
+    if (currentStepValue < steps.length - 1) {
+      currentStep.set(currentStepValue + 1);
     }
   }
 
@@ -164,48 +148,76 @@
   function dismissError() {
     error.set(null);
   }
+
+  function handleProjectSelected(projectData) {
+    // Update stores with project information
+    currentProject.set(projectData);
+    projectSelected.set(true);
+
+    // Always start at step 0 (document upload)
+    // Users can navigate freely using the progress steps
+    currentStep.set(0);
+  }
+
+  function backToProjectSelection() {
+    projectSelected.set(false);
+    currentProject.set(null);
+    currentStep.set(0);
+  }
 </script>
 
 <main class="app">
-  <header class="app-header">
-    <div class="header-content">
-      <h1>Semantic Search Assistant</h1>
-      <p>AI-powered document research and analysis platform</p>
+  {#if hasProjectSelected}
+    <header class="app-header">
+      <div class="header-content">
+        <div>
+          <h1>Semantic Search Assistant</h1>
+          <p>AI-powered document research and analysis platform</p>
+          {#if project}
+            <div class="project-info">
+              <strong>{project.corpus_name}</strong> ({project.model_name})
+              <button class="change-project-btn" on:click={backToProjectSelection}>
+                Change Project
+              </button>
+            </div>
+          {/if}
+        </div>
 
-      {#if !apiHealthy}
-        <div class="api-status error">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="15" y1="9" x2="9" y2="15" />
-            <line x1="9" y1="9" x2="15" y2="15" />
-          </svg>
-          API Disconnected
-        </div>
-      {:else}
-        <div class="api-status healthy">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22,4 12,14.01 9,11.01" />
-          </svg>
-          API Connected
-        </div>
-      {/if}
-    </div>
-  </header>
+        {#if !apiHealthy}
+          <div class="api-status error">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            API Disconnected
+          </div>
+        {:else}
+          <div class="api-status healthy">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22,4 12,14.01 9,11.01" />
+            </svg>
+            API Connected
+          </div>
+        {/if}
+      </div>
+    </header>
+  {/if}
 
   {#if errorMessage}
     <div class="error-banner">
@@ -249,7 +261,12 @@
     </div>
   {/if}
 
-  <div class="app-content">
+  {#if !hasProjectSelected}
+    <!-- Project Selection/Creation Screen -->
+    <ProjectManager onProjectSelected={handleProjectSelected} />
+  {:else}
+    <!-- Project Workflow -->
+    <div class="app-content">
     <!-- Progress Steps -->
     <div class="progress-steps">
       {#each steps as step, index}
@@ -293,45 +310,10 @@
     <div class="step-content">
       {#if currentStepValue === 0}
         <div class="step-panel">
-          {#if resuming}
-            <h2>Resume Existing Project</h2>
-            <p>You've selected an existing project. You can skip to any completed stage or continue from where you left off.</p>
-          {:else}
-            <h2>Upload Documents</h2>
-            <p>Configure your research settings and upload PDF documents that you want to research and analyze.</p>
-          {/if}
-          
-          <ConfigurationPanel />
-          
-          {#if !resuming}
-            <FileUpload on:extracted={handleDocumentsExtracted} />
-          {:else}
-            <div class="resume-info">
-              <h4>Project Status</h4>
-              <div class="stage-status">
-                <div class="stage {stages.description ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.description ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Document Description</span>
-                </div>
-                <div class="stage {stages.plans ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.plans ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Search Plans</span>
-                </div>
-                <div class="stage {stages.reports ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.reports ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Reports</span>
-                </div>
-                <div class="stage {stages.final ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.final ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Final Report</span>
-                </div>
-              </div>
-              <p class="resume-help">Click "Continue" to proceed to the next available step, or use the navigation to jump to any completed stage.</p>
-              <div class="resume-navigation">
-                <button class="nav-btn primary" on:click={nextStep}>Continue</button>
-              </div>
-            </div>
-          {/if}
+          <h2>Upload Documents</h2>
+          <p>Upload PDF documents that you want to research and analyze.</p>
+
+          <FileUpload on:extracted={handleDocumentsExtracted} />
         </div>
       {:else if currentStepValue === 1}
         <div class="step-panel">
@@ -422,6 +404,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 </main>
 
 <style>
@@ -472,6 +455,30 @@
     margin: 0;
     opacity: 0.9;
     font-size: 14px;
+  }
+
+  .project-info {
+    margin-top: 8px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0.95;
+  }
+
+  .change-project-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .change-project-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
 
   .api-status {

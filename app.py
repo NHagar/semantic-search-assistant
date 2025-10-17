@@ -41,49 +41,82 @@ def health_check():
     return jsonify({"status": "healthy", "message": "Semantic Search API is running"})
 
 
+@app.route("/api/available-models", methods=["GET"])
+def get_available_models():
+    """Get list of available models from LM Studio."""
+    try:
+        import requests
+        # Try to fetch from LM Studio
+        response = requests.get("http://localhost:1234/v1/models", timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if "data" in data and isinstance(data["data"], list):
+                models = [model["id"] for model in data["data"]]
+                return jsonify({"models": models})
+
+        # Fallback if LM Studio is not responding properly
+        return jsonify({"models": [], "error": "Could not fetch models from LM Studio"})
+    except Exception as e:
+        # Return empty list with error message if LM Studio is not available
+        return jsonify({"models": [], "error": str(e)})
+
+
 @app.route("/api/existing-combinations", methods=["GET"])
 def get_existing_combinations():
-    """Get list of existing model-corpus combinations."""
+    """Get list of existing model-corpus combinations from project structure."""
     try:
+        from src.project_manager import ProjectManager
+
         combinations = []
-        outputs_dir = Path("outputs")
-        
-        if outputs_dir.exists():
-            for corpus_dir in outputs_dir.iterdir():
-                if corpus_dir.is_dir():
-                    corpus_name = corpus_dir.name
-                    for model_dir in corpus_dir.iterdir():
-                        if model_dir.is_dir():
-                            model_name = model_dir.name
-                            # Convert back from safe filename to original format
-                            original_model = model_name.replace('_', '/')
-                            
-                            # Check if this combination has any files
-                            files = list(model_dir.glob("*.txt")) + list(model_dir.glob("*.md"))
-                            if files:
-                                # Determine what stages are complete
-                                has_description = (model_dir / "doc_report.txt").exists()
-                                has_plans = len(list(model_dir.glob("search_plan_*.txt"))) > 0
-                                has_reports = len(list(model_dir.glob("report_search_plan_*.txt"))) > 0
-                                has_final = (model_dir / "final_report.md").exists()
-                                
-                                combinations.append({
-                                    "corpus_name": corpus_name,
-                                    "model_name": original_model,
-                                    "display_name": f"{corpus_name} ({original_model})",
-                                    "stages": {
-                                        "description": has_description,
-                                        "plans": has_plans,
-                                        "reports": has_reports,
-                                        "final": has_final
-                                    },
-                                    "file_count": len(files),
-                                    "last_modified": max(f.stat().st_mtime for f in files) if files else 0
-                                })
-        
+        projects_dir = Path("projects")
+
+        if not projects_dir.exists():
+            return jsonify({"combinations": []})
+
+        for project_dir in projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+
+            # Read metadata file if it exists
+            metadata_file = project_dir / "metadata.json"
+            if metadata_file.exists():
+                import json
+                with open(metadata_file) as f:
+                    metadata = json.load(f)
+                corpus_name = metadata.get("corpus_name", "")
+                model_name = metadata.get("model_name", "")
+            else:
+                # Parse from directory name
+                dir_name = project_dir.name
+                parts = dir_name.split("_", 1)
+                if len(parts) < 2:
+                    continue
+                corpus_name = parts[0]
+                model_name = parts[1].replace("_", "/")
+
+            # Skip invalid projects (empty corpus or model name)
+            if not corpus_name or not model_name:
+                continue
+
+            # Use ProjectManager to get project info
+            pm = ProjectManager(corpus_name, model_name)
+            if pm.project_dir.exists():
+                info = pm.get_project_info()
+                # Get document count from vector DB or working files
+                doc_count = info.get("document_count", 0)
+
+                combinations.append({
+                    "corpus_name": corpus_name,
+                    "model_name": model_name,
+                    "display_name": f"{corpus_name} ({model_name})",
+                    "stages": info["stages"],
+                    "file_count": doc_count,
+                    "last_modified": info["last_modified"]
+                })
+
         # Sort by last modified time, newest first
         combinations.sort(key=lambda x: x["last_modified"], reverse=True)
-        
+
         return jsonify({"combinations": combinations})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -91,17 +124,25 @@ def get_existing_combinations():
 
 @app.route("/api/upload", methods=["POST"])
 def upload_files():
-    """Upload PDF files to the data directory."""
+    """Upload PDF files to the project-specific working directory."""
     if "files" not in request.files:
         return jsonify({"error": "No files provided"}), 400
+
+    # Get project parameters
+    llm = request.form.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.form.get("corpus_name", "")
+
+    if not corpus_name:
+        return jsonify({"error": "corpus_name is required"}), 400
 
     files = request.files.getlist("files")
     uploaded_files = []
     skipped_files = []
 
-    # Ensure data directory exists
-    data_dir = Path("data")
-    data_dir.mkdir(exist_ok=True)
+    # Get API instance (which has ProjectManager)
+    api = get_api(llm, corpus_name)
+    upload_dir = Path(api.pdfs_dir)
+    upload_dir.mkdir(parents=True, exist_ok=True)
 
     for file in files:
         if not file.filename:
@@ -109,13 +150,13 @@ def upload_files():
 
         if file and file.filename and file.filename.lower().endswith(".pdf"):
             filename = secure_filename(file.filename)
-            filepath = data_dir / filename
-            
+            filepath = upload_dir / filename
+
             # Check if file already exists
             if filepath.exists():
                 skipped_files.append(filename)
                 continue
-            
+
             file.save(str(filepath))
             uploaded_files.append(filename)
 
@@ -124,12 +165,12 @@ def upload_files():
         message_parts.append(f"Uploaded {len(uploaded_files)} files")
     if skipped_files:
         message_parts.append(f"Skipped {len(skipped_files)} existing files")
-    
+
     message = ", ".join(message_parts) if message_parts else "No new files to upload"
 
     return jsonify(
         {
-            "message": message, 
+            "message": message,
             "files": uploaded_files,
             "skipped": skipped_files
         }
@@ -516,11 +557,93 @@ def database_stats():
     """Get vector database statistics."""
     llm = request.args.get("llm", "qwen/qwen3-14b")
     corpus_name = request.args.get("corpus_name", "")
-    
+
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         stats = api.get_database_stats()
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/cleanup-working-files", methods=["POST"])
+def cleanup_working_files():
+    """Clean up temporary working files after processing is complete."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
+    if not corpus_name:
+        return jsonify({"error": "corpus_name is required"}), 400
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        api.cleanup_working_files()
+        return jsonify({"message": "Working files cleaned up successfully"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/create-project", methods=["POST"])
+def create_project():
+    """Create a new project."""
+    data = request.get_json()
+    if not data or "corpus_name" not in data or "llm" not in data:
+        return jsonify({"error": "corpus_name and llm are required"}), 400
+
+    llm = data["llm"]
+    corpus_name = data["corpus_name"]
+
+    try:
+        from src.project_manager import ProjectManager
+
+        # Create project directories and metadata
+        pm = ProjectManager(corpus_name, llm)
+        pm.ensure_directories()
+        ProjectManager.create_metadata_file(corpus_name, llm)
+
+        # Get project info to return
+        info = pm.get_project_info()
+
+        return jsonify({
+            "message": f"Project '{corpus_name}' created successfully",
+            "project": {
+                "corpus_name": corpus_name,
+                "model_name": llm,
+                "display_name": f"{corpus_name} ({llm})",
+                "stages": info["stages"],
+                "file_count": 0,
+                "last_modified": info["last_modified"]
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/delete-project", methods=["POST"])
+def delete_project():
+    """Delete an entire project and all its files."""
+    data = request.get_json()
+    if not data or "corpus_name" not in data:
+        return jsonify({"error": "corpus_name is required"}), 400
+
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data["corpus_name"]
+
+    try:
+        from src.project_manager import ProjectManager
+
+        # Delete from new structure
+        pm = ProjectManager(corpus_name, llm)
+        if pm.project_dir.exists():
+            pm.delete_project()
+
+        # Also clean up from api_instances cache
+        key = f"{llm}|{corpus_name}"
+        if key in api_instances:
+            del api_instances[key]
+
+        return jsonify({"message": f"Project '{corpus_name}' deleted successfully"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -14,10 +14,10 @@ chroma_db/
 chroma_dbs/
 *.txt
 final_report.md
-trump_scotland/
 swamp_chronicles/
-climate/
 
 annotations/
 
 .DS_Store
+
+projects/

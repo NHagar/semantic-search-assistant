@@ -17,11 +17,15 @@ export const apiService = {
   },
 
   // Document management
-  async uploadFiles(files) {
+  async uploadFiles(files, llm = null, corpusName = null) {
     const formData = new FormData();
     for (let file of files) {
       formData.append('files', file);
     }
+    // Add llm and corpus_name as form fields
+    if (llm) formData.append('llm', llm);
+    if (corpusName) formData.append('corpus_name', corpusName);
+
     const response = await api.post('/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -175,6 +179,31 @@ export const apiService = {
   // Existing combinations
   async getExistingCombinations() {
     const response = await api.get('/existing-combinations');
+    return response.data;
+  },
+
+  // Available models
+  async getAvailableModels() {
+    const response = await api.get('/available-models');
+    return response.data;
+  },
+
+  // Project management
+  async createProject(llm, corpusName) {
+    const requestData = { llm, corpus_name: corpusName };
+    const response = await api.post('/create-project', requestData);
+    return response.data;
+  },
+
+  async cleanupWorkingFiles(llm, corpusName) {
+    const requestData = { llm, corpus_name: corpusName };
+    const response = await api.post('/cleanup-working-files', requestData);
+    return response.data;
+  },
+
+  async deleteProject(llm, corpusName) {
+    const requestData = { llm, corpus_name: corpusName };
+    const response = await api.post('/delete-project', requestData);
     return response.data;
   },
 };
