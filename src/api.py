@@ -180,12 +180,12 @@ class SemanticSearchAPI:
         from pathlib import Path
 
         # Count PDF files to calculate token budget automatically
-        data_path = Path(self.data_dir)
+        data_path = Path(self.pdfs_dir)
         pdf_files = list(data_path.glob("*.pdf")) if data_path.exists() else []
         token_budget = len(pdf_files) * n_tokens + 100  # Add 100 token buffer
 
         return process_pdfs_and_sample(
-            data_dir=self.data_dir,
+            data_dir=self.pdfs_dir,
             n_tokens=n_tokens,
             token_budget=token_budget,
             save_txt_files=save_txt_files,
