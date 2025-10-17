@@ -6,8 +6,6 @@
     loading,
     error,
     setError,
-    isResuming,
-    resumeStages,
     projectSelected,
     currentProject,
   } from "./lib/stores.js";
@@ -26,8 +24,6 @@
   let isLoading = false;
   let errorMessage = null;
   let apiHealthy = false;
-  let resuming = false;
-  let stages = { description: false, plans: false, reports: false, final: false };
   let hasProjectSelected = false;
   let project = null;
 
@@ -42,14 +38,6 @@
 
   error.subscribe((value) => {
     errorMessage = value;
-  });
-
-  isResuming.subscribe((value) => {
-    resuming = value;
-  });
-
-  resumeStages.subscribe((value) => {
-    stages = value;
   });
 
   projectSelected.subscribe((value) => {
@@ -77,25 +65,9 @@
   }
 
   function nextStep() {
-    if (resuming && currentStepValue === 0) {
-      // When resuming, jump to the next incomplete stage
-      if (!stages.description) {
-        currentStep.set(1); // Document Description
-      } else if (!stages.plans) {
-        currentStep.set(2); // Search Plans
-      } else if (!stages.reports) {
-        currentStep.set(3); // Search Execution
-      } else if (!stages.final) {
-        currentStep.set(5); // Final Report
-      } else {
-        // All stages complete, go to final report to view
-        currentStep.set(5);
-      }
-    } else {
-      // Normal linear progression
-      if (currentStepValue < steps.length - 1) {
-        currentStep.set(currentStepValue + 1);
-      }
+    // Normal linear progression
+    if (currentStepValue < steps.length - 1) {
+      currentStep.set(currentStepValue + 1);
     }
   }
 
@@ -182,21 +154,8 @@
     currentProject.set(projectData);
     projectSelected.set(true);
 
-    // If this is an existing project, set up resume mode
-    if (!projectData.isNew && projectData.stages) {
-      isResuming.set(true);
-      resumeStages.set(projectData.stages);
-    } else {
-      isResuming.set(false);
-      resumeStages.set({
-        description: false,
-        plans: false,
-        reports: false,
-        final: false
-      });
-    }
-
-    // Start at step 0 (document upload)
+    // Always start at step 0 (document upload)
+    // Users can navigate freely using the progress steps
     currentStep.set(0);
   }
 
@@ -204,7 +163,6 @@
     projectSelected.set(false);
     currentProject.set(null);
     currentStep.set(0);
-    isResuming.set(false);
   }
 </script>
 
@@ -352,43 +310,10 @@
     <div class="step-content">
       {#if currentStepValue === 0}
         <div class="step-panel">
-          {#if resuming}
-            <h2>Resume Existing Project</h2>
-            <p>You've selected an existing project. You can skip to any completed stage or continue from where you left off.</p>
-          {:else}
-            <h2>Upload Documents</h2>
-            <p>Upload PDF documents that you want to research and analyze.</p>
-          {/if}
+          <h2>Upload Documents</h2>
+          <p>Upload PDF documents that you want to research and analyze.</p>
 
-          {#if !resuming}
-            <FileUpload on:extracted={handleDocumentsExtracted} />
-          {:else}
-            <div class="resume-info">
-              <h4>Project Status</h4>
-              <div class="stage-status">
-                <div class="stage {stages.description ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.description ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Document Description</span>
-                </div>
-                <div class="stage {stages.plans ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.plans ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Search Plans</span>
-                </div>
-                <div class="stage {stages.reports ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.reports ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Reports</span>
-                </div>
-                <div class="stage {stages.final ? 'complete' : 'incomplete'}">
-                  <span class="stage-icon">{stages.final ? '✅' : '⭕'}</span>
-                  <span class="stage-name">Final Report</span>
-                </div>
-              </div>
-              <p class="resume-help">Click "Continue" to proceed to the next available step, or use the navigation to jump to any completed stage.</p>
-              <div class="resume-navigation">
-                <button class="nav-btn primary" on:click={nextStep}>Continue</button>
-              </div>
-            </div>
-          {/if}
+          <FileUpload on:extracted={handleDocumentsExtracted} />
         </div>
       {:else if currentStepValue === 1}
         <div class="step-panel">
