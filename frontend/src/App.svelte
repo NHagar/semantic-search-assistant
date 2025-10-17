@@ -8,10 +8,13 @@
     setError,
     isResuming,
     resumeStages,
+    projectSelected,
+    currentProject,
   } from "./lib/stores.js";
   import { apiService } from "./lib/api.js";
 
   // Components
+  import ProjectManager from "./lib/ProjectManager.svelte";
   import ConfigurationPanel from "./lib/ConfigurationPanel.svelte";
   import FileUpload from "./lib/FileUpload.svelte";
   import DocumentDescription from "./lib/DocumentDescription.svelte";
@@ -26,6 +29,8 @@
   let apiHealthy = false;
   let resuming = false;
   let stages = { description: false, plans: false, reports: false, final: false };
+  let hasProjectSelected = false;
+  let project = null;
 
   // Subscribe to store changes
   currentStep.subscribe((value) => {
@@ -46,6 +51,14 @@
 
   resumeStages.subscribe((value) => {
     stages = value;
+  });
+
+  projectSelected.subscribe((value) => {
+    hasProjectSelected = value;
+  });
+
+  currentProject.subscribe((value) => {
+    project = value;
   });
 
   onMount(async () => {
@@ -164,48 +177,90 @@
   function dismissError() {
     error.set(null);
   }
+
+  function handleProjectSelected(projectData) {
+    // Update stores with project information
+    currentProject.set(projectData);
+    projectSelected.set(true);
+
+    // If this is an existing project, set up resume mode
+    if (!projectData.isNew && projectData.stages) {
+      isResuming.set(true);
+      resumeStages.set(projectData.stages);
+    } else {
+      isResuming.set(false);
+      resumeStages.set({
+        description: false,
+        plans: false,
+        reports: false,
+        final: false
+      });
+    }
+
+    // Start at step 0 (document upload)
+    currentStep.set(0);
+  }
+
+  function backToProjectSelection() {
+    projectSelected.set(false);
+    currentProject.set(null);
+    currentStep.set(0);
+    isResuming.set(false);
+  }
 </script>
 
 <main class="app">
-  <header class="app-header">
-    <div class="header-content">
-      <h1>Semantic Search Assistant</h1>
-      <p>AI-powered document research and analysis platform</p>
+  {#if hasProjectSelected}
+    <header class="app-header">
+      <div class="header-content">
+        <div>
+          <h1>Semantic Search Assistant</h1>
+          <p>AI-powered document research and analysis platform</p>
+          {#if project}
+            <div class="project-info">
+              <strong>{project.corpus_name}</strong> ({project.model_name})
+              <button class="change-project-btn" on:click={backToProjectSelection}>
+                Change Project
+              </button>
+            </div>
+          {/if}
+        </div>
 
-      {#if !apiHealthy}
-        <div class="api-status error">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="15" y1="9" x2="9" y2="15" />
-            <line x1="9" y1="9" x2="15" y2="15" />
-          </svg>
-          API Disconnected
-        </div>
-      {:else}
-        <div class="api-status healthy">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-          >
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22,4 12,14.01 9,11.01" />
-          </svg>
-          API Connected
-        </div>
-      {/if}
-    </div>
-  </header>
+        {#if !apiHealthy}
+          <div class="api-status error">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="15" y1="9" x2="9" y2="15" />
+              <line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            API Disconnected
+          </div>
+        {:else}
+          <div class="api-status healthy">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22,4 12,14.01 9,11.01" />
+            </svg>
+            API Connected
+          </div>
+        {/if}
+      </div>
+    </header>
+  {/if}
 
   {#if errorMessage}
     <div class="error-banner">
@@ -249,7 +304,12 @@
     </div>
   {/if}
 
-  <div class="app-content">
+  {#if !hasProjectSelected}
+    <!-- Project Selection/Creation Screen -->
+    <ProjectManager onProjectSelected={handleProjectSelected} />
+  {:else}
+    <!-- Project Workflow -->
+    <div class="app-content">
     <!-- Progress Steps -->
     <div class="progress-steps">
       {#each steps as step, index}
@@ -422,6 +482,7 @@
       {/if}
     </div>
   </div>
+  {/if}
 </main>
 
 <style>
@@ -472,6 +533,30 @@
     margin: 0;
     opacity: 0.9;
     font-size: 14px;
+  }
+
+  .project-info {
+    margin-top: 8px;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0.95;
+  }
+
+  .change-project-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .change-project-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
 
   .api-status {
