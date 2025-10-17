@@ -95,11 +95,44 @@ class ProjectManager:
         return sorted(self.outputs_dir.glob("*"))
 
     def get_document_count(self) -> int:
-        """Get the number of source documents (PDFs or txt files)."""
+        """
+        Get the number of source documents.
+
+        Priority:
+        1. Files in working directory (PDFs or txt)
+        2. Unique files in vector database
+        3. Return 0
+        """
+        # Check working directory first
         pdf_count = len(self.list_pdfs())
         if pdf_count > 0:
             return pdf_count
-        return len(self.list_txt_files())
+
+        txt_count = len(self.list_txt_files())
+        if txt_count > 0:
+            return txt_count
+
+        # If no working files, try to get count from vector database
+        try:
+            import chromadb
+            if self.chroma_db_dir.exists():
+                chroma_client = chromadb.PersistentClient(path=str(self.chroma_db_dir))
+                try:
+                    collection = chroma_client.get_collection(name="documents")
+                    results = collection.get()
+                    if results and results.get("metadatas"):
+                        # Count unique filenames
+                        filenames = set()
+                        for metadata in results["metadatas"]:
+                            if metadata.get("filename"):
+                                filenames.add(metadata["filename"])
+                        return len(filenames)
+                except:
+                    pass
+        except:
+            pass
+
+        return 0
 
     def cleanup_working_directory(self) -> None:
         """
