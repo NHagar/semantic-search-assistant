@@ -86,7 +86,7 @@
     onProjectSelected(project);
   }
 
-  function createNewProject() {
+  async function createNewProject() {
     if (!newProjectName.trim()) {
       alert("Please enter a project name");
       return;
@@ -94,18 +94,25 @@
 
     creatingProject = true;
 
-    // Set the project parameters
-    selectedLLM.set(newProjectLLM);
-    corpusName.set(newProjectName.trim());
+    try {
+      // Create the project on the backend first
+      await apiService.createProject(newProjectLLM, newProjectName.trim());
 
-    // Notify parent component
-    onProjectSelected({
-      corpus_name: newProjectName.trim(),
-      model_name: newProjectLLM,
-      isNew: true,
-    });
+      // Set the project parameters
+      selectedLLM.set(newProjectLLM);
+      corpusName.set(newProjectName.trim());
 
-    creatingProject = false;
+      // Notify parent component
+      onProjectSelected({
+        corpus_name: newProjectName.trim(),
+        model_name: newProjectLLM,
+        isNew: true,
+      });
+    } catch (err) {
+      alert("Failed to create project: " + err.message);
+      console.error("Error creating project:", err);
+      creatingProject = false;
+    }
   }
 
   function getStageProgress(stages) {

@@ -185,6 +185,12 @@ export const apiService = {
   },
 
   // Project management
+  async createProject(llm, corpusName) {
+    const requestData = { llm, corpus_name: corpusName };
+    const response = await api.post('/create-project', requestData);
+    return response.data;
+  },
+
   async cleanupWorkingFiles(llm, corpusName) {
     const requestData = { llm, corpus_name: corpusName };
     const response = await api.post('/cleanup-working-files', requestData);

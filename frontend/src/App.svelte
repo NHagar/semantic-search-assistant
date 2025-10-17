@@ -15,7 +15,6 @@
 
   // Components
   import ProjectManager from "./lib/ProjectManager.svelte";
-  import ConfigurationPanel from "./lib/ConfigurationPanel.svelte";
   import FileUpload from "./lib/FileUpload.svelte";
   import DocumentDescription from "./lib/DocumentDescription.svelte";
   import SearchPlans from "./lib/SearchPlans.svelte";
@@ -358,11 +357,9 @@
             <p>You've selected an existing project. You can skip to any completed stage or continue from where you left off.</p>
           {:else}
             <h2>Upload Documents</h2>
-            <p>Configure your research settings and upload PDF documents that you want to research and analyze.</p>
+            <p>Upload PDF documents that you want to research and analyze.</p>
           {/if}
-          
-          <ConfigurationPanel />
-          
+
           {#if !resuming}
             <FileUpload on:extracted={handleDocumentsExtracted} />
           {:else}

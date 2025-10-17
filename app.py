@@ -584,6 +584,42 @@ def cleanup_working_files():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/create-project", methods=["POST"])
+def create_project():
+    """Create a new project."""
+    data = request.get_json()
+    if not data or "corpus_name" not in data or "llm" not in data:
+        return jsonify({"error": "corpus_name and llm are required"}), 400
+
+    llm = data["llm"]
+    corpus_name = data["corpus_name"]
+
+    try:
+        from src.project_manager import ProjectManager
+
+        # Create project directories and metadata
+        pm = ProjectManager(corpus_name, llm)
+        pm.ensure_directories()
+        ProjectManager.create_metadata_file(corpus_name, llm)
+
+        # Get project info to return
+        info = pm.get_project_info()
+
+        return jsonify({
+            "message": f"Project '{corpus_name}' created successfully",
+            "project": {
+                "corpus_name": corpus_name,
+                "model_name": llm,
+                "display_name": f"{corpus_name} ({llm})",
+                "stages": info["stages"],
+                "file_count": 0,
+                "last_modified": info["last_modified"]
+            }
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/delete-project", methods=["POST"])
 def delete_project():
     """Delete an entire project and all its files."""
