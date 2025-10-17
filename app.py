@@ -43,94 +43,52 @@ def health_check():
 
 @app.route("/api/existing-combinations", methods=["GET"])
 def get_existing_combinations():
-    """Get list of existing model-corpus combinations from new project structure."""
+    """Get list of existing model-corpus combinations from project structure."""
     try:
         from src.project_manager import ProjectManager
 
         combinations = []
-
-        # Check both old and new structures
-        # New structure: projects/{corpus}_{model}/
         projects_dir = Path("projects")
-        if projects_dir.exists():
-            for project_dir in projects_dir.iterdir():
-                if not project_dir.is_dir():
+
+        if not projects_dir.exists():
+            return jsonify({"combinations": []})
+
+        for project_dir in projects_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+
+            # Read metadata file if it exists
+            metadata_file = project_dir / "metadata.json"
+            if metadata_file.exists():
+                import json
+                with open(metadata_file) as f:
+                    metadata = json.load(f)
+                corpus_name = metadata.get("corpus_name", "")
+                model_name = metadata.get("model_name", "")
+            else:
+                # Parse from directory name
+                dir_name = project_dir.name
+                parts = dir_name.split("_", 1)
+                if len(parts) < 2:
                     continue
+                corpus_name = parts[0]
+                model_name = parts[1].replace("_", "/")
 
-                # Read metadata file if it exists
-                metadata_file = project_dir / "metadata.json"
-                if metadata_file.exists():
-                    import json
-                    with open(metadata_file) as f:
-                        metadata = json.load(f)
-                    corpus_name = metadata.get("corpus_name", "")
-                    model_name = metadata.get("model_name", "")
-                else:
-                    # Parse from directory name
-                    dir_name = project_dir.name
-                    parts = dir_name.split("_", 1)
-                    if len(parts) < 2:
-                        continue
-                    corpus_name = parts[0]
-                    model_name = parts[1].replace("_", "/")
+            # Use ProjectManager to get project info
+            pm = ProjectManager(corpus_name, model_name)
+            if pm.project_dir.exists():
+                info = pm.get_project_info()
+                # Get document count from vector DB or working files
+                doc_count = info.get("document_count", 0)
 
-                # Use ProjectManager to get project info
-                pm = ProjectManager(corpus_name, model_name)
-                if pm.project_dir.exists():
-                    info = pm.get_project_info()
-                    # Get document count from vector DB or working files
-                    doc_count = info.get("document_count", 0)
-
-                    combinations.append({
-                        "corpus_name": corpus_name,
-                        "model_name": model_name,
-                        "display_name": f"{corpus_name} ({model_name})",
-                        "stages": info["stages"],
-                        "file_count": doc_count,
-                        "last_modified": info["last_modified"]
-                    })
-
-        # Legacy structure: outputs/{corpus}/{model}/
-        outputs_dir = Path("outputs")
-        if outputs_dir.exists():
-            for corpus_dir in outputs_dir.iterdir():
-                if corpus_dir.is_dir():
-                    corpus_name = corpus_dir.name
-                    for model_dir in corpus_dir.iterdir():
-                        if model_dir.is_dir():
-                            model_name = model_dir.name
-                            # Convert back from safe filename to original format
-                            original_model = model_name.replace('_', '/')
-
-                            # Check if this combination has any files
-                            files = list(model_dir.glob("*.txt")) + list(model_dir.glob("*.md"))
-                            if files:
-                                # Determine what stages are complete
-                                has_description = (model_dir / "doc_report.txt").exists()
-                                has_plans = len(list(model_dir.glob("search_plan_*.txt"))) > 0
-                                has_reports = len(list(model_dir.glob("report_search_plan_*.txt"))) > 0
-                                has_final = (model_dir / "final_report.md").exists()
-
-                                # Check if already added from new structure
-                                already_exists = any(
-                                    c["corpus_name"] == corpus_name and c["model_name"] == original_model
-                                    for c in combinations
-                                )
-
-                                if not already_exists:
-                                    combinations.append({
-                                        "corpus_name": corpus_name,
-                                        "model_name": original_model,
-                                        "display_name": f"{corpus_name} ({original_model})",
-                                        "stages": {
-                                            "description": has_description,
-                                            "plans": has_plans,
-                                            "reports": has_reports,
-                                            "final": has_final
-                                        },
-                                        "file_count": len(files),
-                                        "last_modified": max(f.stat().st_mtime for f in files) if files else 0
-                                    })
+                combinations.append({
+                    "corpus_name": corpus_name,
+                    "model_name": model_name,
+                    "display_name": f"{corpus_name} ({model_name})",
+                    "stages": info["stages"],
+                    "file_count": doc_count,
+                    "last_modified": info["last_modified"]
+                })
 
         # Sort by last modified time, newest first
         combinations.sort(key=lambda x: x["last_modified"], reverse=True)

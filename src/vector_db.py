@@ -22,31 +22,25 @@ class VectorDB:
         Initialize VectorDB.
 
         Args:
-            data_dir: Legacy parameter for txt file directory (deprecated)
+            data_dir: Deprecated parameter (ignored)
             collection_name: Name of the chroma collection
             corpus_name: Name of the corpus (used if project_manager not provided)
             model_name: Name of the model (used if project_manager not provided)
-            project_manager: ProjectManager instance for new architecture
+            project_manager: ProjectManager instance (recommended)
         """
         self.collection_name = collection_name
         self.corpus_name = corpus_name
         self.model_name = model_name
 
-        # Use ProjectManager for new architecture
+        # Use ProjectManager
         if project_manager:
             self.project_manager = project_manager
-            self.data_dir = self.project_manager.txt_dir
-            db_path = self.project_manager.chroma_db_dir
         else:
-            # Legacy mode: use old directory structure
-            if data_dir:
-                self.data_dir = Path(data_dir)
-            else:
-                # Create a project manager for legacy compatibility
-                self.project_manager = ProjectManager(corpus_name, model_name)
-                self.data_dir = self.project_manager.txt_dir
-                db_path = self.project_manager.chroma_db_dir
+            # Create a project manager if not provided
+            self.project_manager = ProjectManager(corpus_name, model_name)
 
+        self.data_dir = self.project_manager.txt_dir
+        db_path = self.project_manager.chroma_db_dir
         db_path.mkdir(parents=True, exist_ok=True)
 
         self.chroma_client = chromadb.PersistentClient(path=str(db_path))
