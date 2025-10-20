@@ -15,8 +15,6 @@
   let corpus = '';
   let extractingCount = 0;
   let embedding = false;
-  let embeddingProgress = { current: 0, total: 0, filename: '' };
-  let progressInterval = null;
   let loading = false;
   let originalTexts = {}; // Track original text for each document
 
@@ -237,24 +235,6 @@
     fileInput.click();
   }
 
-  async function pollProgress() {
-    const projectKey = `${llm}|${corpus}`;
-    try {
-      const response = await fetch(`http://localhost:5001/api/embedding-progress/${encodeURIComponent(projectKey)}`);
-      const progress = await response.json();
-      embeddingProgress = progress;
-
-      if (progress.complete || progress.error) {
-        if (progressInterval) {
-          clearInterval(progressInterval);
-          progressInterval = null;
-        }
-      }
-    } catch (err) {
-      console.error('Failed to poll progress:', err);
-    }
-  }
-
   async function embedAndProceed() {
     if (documents.length === 0) {
       setError('Please upload at least one PDF document');
@@ -272,11 +252,7 @@
     }
 
     embedding = true;
-    embeddingProgress = { current: 0, total: documents.length, filename: 'Starting...' };
     setLoading(true);
-
-    // Start polling for progress
-    progressInterval = setInterval(pollProgress, 500);
 
     try {
       // Separate documents into new vs modified/existing
@@ -333,10 +309,6 @@
     } finally {
       embedding = false;
       setLoading(false);
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
     }
   }
 
@@ -480,20 +452,6 @@
         {/if}
       </div>
     </div>
-
-    <!-- Embedding Progress -->
-    {#if embedding && embeddingProgress.total > 0}
-      <div class="embedding-progress-container">
-        <div class="progress-header">
-          <span class="progress-label">Embedding Documents</span>
-          <span class="progress-count">{embeddingProgress.current} / {embeddingProgress.total}</span>
-        </div>
-        <div class="progress-bar">
-          <div class="progress-fill" style="width: {(embeddingProgress.current / embeddingProgress.total) * 100}%"></div>
-        </div>
-        <div class="progress-filename">{embeddingProgress.filename}</div>
-      </div>
-    {/if}
 
     <!-- Action buttons -->
     <div class="action-buttons">
@@ -798,56 +756,6 @@
   .error-message p {
     margin: 0;
     font-size: 14px;
-  }
-
-  .embedding-progress-container {
-    margin-top: 20px;
-    padding: 20px;
-    background: #f8f9fa;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-  }
-
-  .progress-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 12px;
-  }
-
-  .progress-label {
-    font-weight: 600;
-    color: #333;
-    font-size: 14px;
-  }
-
-  .progress-count {
-    font-size: 14px;
-    color: #666;
-    font-weight: 500;
-  }
-
-  .progress-bar {
-    width: 100%;
-    height: 24px;
-    background: #e0e0e0;
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 8px;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
-    transition: width 0.3s ease;
-    border-radius: 12px;
-  }
-
-  .progress-filename {
-    font-size: 12px;
-    color: #666;
-    text-align: center;
-    font-style: italic;
   }
 
   .action-buttons {
