@@ -626,6 +626,47 @@ def cleanup_working_files():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/get-embedded-documents", methods=["GET"])
+def get_embedded_documents():
+    """Get all documents from the vector database."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        documents = api.get_all_embedded_documents()
+        return jsonify({"documents": documents})
+    except Exception as e:
+        print(f"[get-embedded-documents] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/delete-embedded-document", methods=["POST"])
+def delete_embedded_document():
+    """Delete a document from the vector database."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+    filename = data.get("filename", "")
+
+    if not filename:
+        return jsonify({"error": "filename is required"}), 400
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        success = api.delete_embedded_document(filename)
+
+        if success:
+            return jsonify({"message": f"Deleted document: {filename}"})
+        else:
+            return jsonify({"error": f"Document not found: {filename}"}), 404
+    except Exception as e:
+        print(f"[delete-embedded-document] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/create-project", methods=["POST"])
 def create_project():
     """Create a new project."""

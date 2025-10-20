@@ -214,4 +214,21 @@ export const apiService = {
     const response = await api.post('/delete-project', requestData);
     return response.data;
   },
+
+  // Embedded documents management
+  async getEmbeddedDocuments(llm = null, corpusName = null) {
+    const params = new URLSearchParams();
+    if (llm) params.append('llm', llm);
+    if (corpusName) params.append('corpus_name', corpusName);
+    const response = await api.get(`/get-embedded-documents?${params.toString()}`);
+    return response.data;
+  },
+
+  async deleteEmbeddedDocument(filename, llm = null, corpusName = null) {
+    const requestData = { filename };
+    if (llm) requestData.llm = llm;
+    if (corpusName) requestData.corpus_name = corpusName;
+    const response = await api.post('/delete-embedded-document', requestData);
+    return response.data;
+  },
 };

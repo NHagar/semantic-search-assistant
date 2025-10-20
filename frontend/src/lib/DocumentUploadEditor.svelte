@@ -8,26 +8,72 @@
 
   let fileInput;
   let dragActive = false;
-  let documents = []; // Array of {file, name, text, extracting, error}
+  let documents = []; // Array of {file, name, text, extracting, error, isExisting, isModified}
   let selectedDocIndex = 0;
   let editedText = '';
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
   let extractingCount = 0;
   let embedding = false;
+  let embeddingProgress = { current: 0, total: 0, filename: '' };
+  let progressInterval = null;
+  let loading = false;
+  let originalTexts = {}; // Track original text for each document
 
   // Subscribe to store values
   selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
   corpusName.subscribe(value => { corpus = value || ''; });
 
-  // Configure PDF.js worker
-  onMount(() => {
+  // Configure PDF.js worker and load existing documents
+  onMount(async () => {
     // Use the worker from node_modules instead of CDN
     pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
       'pdfjs-dist/build/pdf.worker.min.mjs',
       import.meta.url
     ).href;
+
+    // Load existing documents from vector database
+    await loadExistingDocuments();
   });
+
+  async function loadExistingDocuments() {
+    if (!corpus || !llm) {
+      return;
+    }
+
+    loading = true;
+    try {
+      const response = await apiService.getEmbeddedDocuments(llm, corpus);
+      if (response.documents && response.documents.length > 0) {
+        // Load existing documents from the vector database
+        documents = response.documents.map(doc => ({
+          file: null, // No file object for existing docs
+          name: doc.filename,
+          text: doc.text,
+          extracting: false,
+          error: null,
+          isExisting: true,
+          isModified: false
+        }));
+
+        // Store original texts
+        response.documents.forEach(doc => {
+          originalTexts[doc.filename] = doc.text;
+        });
+
+        // Select first document
+        if (documents.length > 0) {
+          selectedDocIndex = 0;
+          editedText = documents[0].text;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load existing documents:', err);
+      // Don't set error - just start with empty state
+    } finally {
+      loading = false;
+    }
+  }
 
   $: {
     // Update edited text when selection changes
@@ -118,7 +164,22 @@
     return fullText.trim();
   }
 
-  function removeDocument(index) {
+  async function removeDocument(index) {
+    const doc = documents[index];
+
+    // If it's an existing document in the vector database, delete it
+    if (doc.isExisting) {
+      try {
+        await apiService.deleteEmbeddedDocument(doc.name, llm, corpus);
+        // Also remove from originalTexts
+        delete originalTexts[doc.name];
+      } catch (err) {
+        setError(`Failed to delete document: ${err.message}`);
+        return;
+      }
+    }
+
+    // Remove from local state
     documents = documents.filter((_, i) => i !== index);
 
     // Adjust selected index if needed
@@ -147,11 +208,35 @@
     editedText = event.target.value;
     if (documents[selectedDocIndex]) {
       documents[selectedDocIndex].text = editedText;
+
+      // Mark as modified if it's an existing document and text has changed
+      if (documents[selectedDocIndex].isExisting) {
+        const originalText = originalTexts[documents[selectedDocIndex].name];
+        documents[selectedDocIndex].isModified = (editedText !== originalText);
+      }
     }
   }
 
   function openFilePicker() {
     fileInput.click();
+  }
+
+  async function pollProgress() {
+    const projectKey = `${llm}|${corpus}`;
+    try {
+      const response = await fetch(`http://localhost:5001/api/embedding-progress/${encodeURIComponent(projectKey)}`);
+      const progress = await response.json();
+      embeddingProgress = progress;
+
+      if (progress.complete || progress.error) {
+        if (progressInterval) {
+          clearInterval(progressInterval);
+          progressInterval = null;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to poll progress:', err);
+    }
   }
 
   async function embedAndProceed() {
@@ -171,24 +256,59 @@
     }
 
     embedding = true;
+    embeddingProgress = { current: 0, total: documents.length, filename: 'Starting...' };
     setLoading(true);
 
+    // Start polling for progress
+    progressInterval = setInterval(pollProgress, 500);
+
     try {
-      // First upload the original PDF files
-      const filesToUpload = documents.map(doc => doc.file);
-      await apiService.uploadFiles(filesToUpload, llm, corpus);
+      // Separate documents into new vs modified/existing
+      const newDocuments = documents.filter(doc => !doc.isExisting);
+      const modifiedDocuments = documents.filter(doc => doc.isExisting && doc.isModified);
+      const unchangedDocuments = documents.filter(doc => doc.isExisting && !doc.isModified);
 
-      // Create a map of document names to their edited text
-      const documentTexts = {};
+      console.log(`New: ${newDocuments.length}, Modified: ${modifiedDocuments.length}, Unchanged: ${unchangedDocuments.length}`);
+
+      // Upload PDF files for new documents
+      if (newDocuments.length > 0) {
+        const filesToUpload = newDocuments.map(doc => doc.file).filter(f => f !== null);
+        if (filesToUpload.length > 0) {
+          await apiService.uploadFiles(filesToUpload, llm, corpus);
+        }
+      }
+
+      // For modified documents, delete old embeddings
+      for (const doc of modifiedDocuments) {
+        await apiService.deleteEmbeddedDocument(doc.name, llm, corpus);
+      }
+
+      // Save text for new and modified documents
+      const documentsToSave = [...newDocuments, ...modifiedDocuments];
+      if (documentsToSave.length > 0) {
+        const documentTexts = {};
+        documentsToSave.forEach(doc => {
+          documentTexts[doc.name] = doc.text;
+        });
+
+        // Save the edited texts to the backend
+        await apiService.saveExtractedTexts(documentTexts, llm, corpus);
+
+        // Build the vector database with the new/modified texts
+        await apiService.extractDocuments(llm, corpus);
+      }
+
+      // Update all documents to be marked as existing and unmodified
+      documents = documents.map(doc => ({
+        ...doc,
+        isExisting: true,
+        isModified: false
+      }));
+
+      // Update original texts
       documents.forEach(doc => {
-        documentTexts[doc.name] = doc.text;
+        originalTexts[doc.name] = doc.text;
       });
-
-      // Save the edited texts to the backend
-      await apiService.saveExtractedTexts(documentTexts, llm, corpus);
-
-      // Build the vector database with the edited texts
-      await apiService.extractDocuments(llm, corpus);
 
       dispatch('extracted', { documents: documents });
       setError(null);
@@ -197,6 +317,10 @@
     } finally {
       embedding = false;
       setLoading(false);
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
     }
   }
 
@@ -269,6 +393,15 @@
                     </svg>
                     <span>Error</span>
                   </div>
+                {:else if doc.isModified}
+                  <div class="status modified">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="8" x2="12" y2="12" />
+                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                    </svg>
+                    <span>Modified</span>
+                  </div>
                 {:else}
                   <div class="status success">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -331,6 +464,20 @@
         {/if}
       </div>
     </div>
+
+    <!-- Embedding Progress -->
+    {#if embedding && embeddingProgress.total > 0}
+      <div class="embedding-progress-container">
+        <div class="progress-header">
+          <span class="progress-label">Embedding Documents</span>
+          <span class="progress-count">{embeddingProgress.current} / {embeddingProgress.total}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: {(embeddingProgress.current / embeddingProgress.total) * 100}%"></div>
+        </div>
+        <div class="progress-filename">{embeddingProgress.filename}</div>
+      </div>
+    {/if}
 
     <!-- Action buttons -->
     <div class="action-buttons">
@@ -510,6 +657,10 @@
     color: #4CAF50;
   }
 
+  .status.modified {
+    color: #FF9800;
+  }
+
   .status.error {
     color: #f44336;
   }
@@ -631,6 +782,56 @@
   .error-message p {
     margin: 0;
     font-size: 14px;
+  }
+
+  .embedding-progress-container {
+    margin-top: 20px;
+    padding: 20px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+  }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .progress-label {
+    font-weight: 600;
+    color: #333;
+    font-size: 14px;
+  }
+
+  .progress-count {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 24px;
+    background: #e0e0e0;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50 0%, #45a049 100%);
+    transition: width 0.3s ease;
+    border-radius: 12px;
+  }
+
+  .progress-filename {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    font-style: italic;
   }
 
   .action-buttons {

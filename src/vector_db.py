@@ -147,6 +147,95 @@ class VectorDB:
             print(f"Error getting collection stats: {e}")
             return {"total_chunks": 0, "unique_files": 0, "filenames": []}
 
+    def get_document_by_filename(self, filename: str) -> Dict[str, Any]:
+        """Retrieve a document's full text by reassembling its chunks.
+
+        Args:
+            filename: The filename to retrieve
+
+        Returns:
+            Dictionary with filename and reconstructed text
+        """
+        try:
+            results = self.collection.get()
+            if not results or not results["metadatas"]:
+                return {"filename": filename, "text": "", "chunks": []}
+
+            # Filter chunks for this filename and sort by chunk_id
+            document_chunks = []
+            for i, metadata in enumerate(results["metadatas"]):
+                if metadata.get("filename") == filename:
+                    document_chunks.append({
+                        "chunk_id": metadata.get("chunk_id", 0),
+                        "content": metadata.get("content", ""),
+                        "citation_key": metadata.get("citation_key", "")
+                    })
+
+            # Sort by chunk_id to get proper order
+            document_chunks.sort(key=lambda x: x["chunk_id"])
+
+            # Reconstruct full text from chunks
+            full_text = " ".join([chunk["content"] for chunk in document_chunks])
+
+            return {
+                "filename": filename,
+                "text": full_text,
+                "chunks": document_chunks
+            }
+        except Exception as e:
+            print(f"Error getting document {filename}: {e}")
+            return {"filename": filename, "text": "", "chunks": []}
+
+    def get_all_documents(self) -> List[Dict[str, Any]]:
+        """Retrieve all documents with their reconstructed text.
+
+        Returns:
+            List of documents with filename and text
+        """
+        filenames = self.get_existing_filenames()
+        documents = []
+
+        for filename in sorted(filenames):
+            doc = self.get_document_by_filename(filename)
+            documents.append({
+                "filename": doc["filename"],
+                "text": doc["text"]
+            })
+
+        return documents
+
+    def delete_document(self, filename: str) -> bool:
+        """Delete all chunks for a specific document.
+
+        Args:
+            filename: The filename to delete
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            results = self.collection.get()
+            if not results or not results["metadatas"]:
+                return False
+
+            # Find all citation keys for this filename
+            citation_keys_to_delete = []
+            for i, metadata in enumerate(results["metadatas"]):
+                if metadata.get("filename") == filename:
+                    citation_key = results["ids"][i]
+                    citation_keys_to_delete.append(citation_key)
+
+            if citation_keys_to_delete:
+                self.collection.delete(ids=citation_keys_to_delete)
+                print(f"Deleted {len(citation_keys_to_delete)} chunks for {filename}")
+                return True
+            else:
+                print(f"No chunks found for {filename}")
+                return False
+        except Exception as e:
+            print(f"Error deleting document {filename}: {e}")
+            return False
+
     def embed_texts(self, texts: List[str]) -> List[float]:
         """Embed a list of texts using the SentenceTransformer."""
         embeddings = self.embedder.encode(
