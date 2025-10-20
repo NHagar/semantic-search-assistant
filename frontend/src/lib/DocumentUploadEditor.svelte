@@ -105,21 +105,37 @@
     dragActive = false;
   }
 
+  // Helper function to normalize filename (matches backend's secure_filename behavior)
+  function normalizeFilename(filename) {
+    // Remove extension, normalize, then add back
+    const nameWithoutExt = filename.replace(/\.pdf$/i, '');
+    const normalized = nameWithoutExt
+      .replace(/[^\w\s-]/g, '') // Remove special chars except word chars, spaces, hyphens
+      .replace(/[-\s]+/g, '_')   // Replace spaces and hyphens with underscores
+      .replace(/^_+|_+$/g, '');  // Trim underscores from start/end
+    return normalized + '.pdf';
+  }
+
   async function addFiles(newFiles) {
     const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
 
     for (const file of pdfFiles) {
+      // Normalize filename to match what backend will save
+      const normalizedName = normalizeFilename(file.name);
+
       // Check if file already exists
-      if (documents.some(doc => doc.name === file.name)) {
+      if (documents.some(doc => doc.name === normalizedName)) {
         continue;
       }
 
       const doc = {
         file: file,
-        name: file.name,
+        name: normalizedName,
         text: '',
         extracting: true,
-        error: null
+        error: null,
+        isExisting: false,
+        isModified: false
       };
 
       documents = [...documents, doc];
