@@ -178,11 +178,13 @@ def upload_files():
 
 @app.route("/api/save-extracted-texts", methods=["POST"])
 def save_extracted_texts():
-    """Save extracted and potentially edited text from PDFs to txt files."""
+    """Save extracted and potentially edited text from PDFs to txt files and re-embed them."""
     data = request.get_json() or {}
     llm = data.get("llm", "qwen/qwen3-14b")
     corpus_name = data.get("corpus_name", "")
     document_texts = data.get("document_texts", {})
+    chunk_size = data.get("chunk_size", 1024)
+    overlap = data.get("overlap", 20)
 
     if not corpus_name:
         return jsonify({"error": "corpus_name is required"}), 400
@@ -203,6 +205,7 @@ def save_extracted_texts():
         print(f"[save-extracted-texts] Created directory: {txt_dir}")
 
         saved_files = []
+        reembedded_files = []
 
         # Save each document's text to a .txt file
         for pdf_filename, text_content in document_texts.items():
@@ -218,10 +221,29 @@ def save_extracted_texts():
             saved_files.append(txt_filename)
             print(f"[save-extracted-texts] Saved: {txt_filepath}")
 
+            # Re-embed the document if it was already in the vector database
+            if api.vector_db.is_document_processed(txt_filename):
+                print(f"[save-extracted-texts] Re-embedding: {txt_filename}")
+                success = api.vector_db.reembed_document(
+                    txt_filename, chunk_size=chunk_size, overlap=overlap
+                )
+                if success:
+                    reembedded_files.append(txt_filename)
+                else:
+                    print(f"[save-extracted-texts] Failed to re-embed: {txt_filename}")
+
+        message_parts = [f"Saved {len(saved_files)} text files"]
+        if reembedded_files:
+            message_parts.append(f"re-embedded {len(reembedded_files)} documents")
+
         print(f"[save-extracted-texts] Successfully saved {len(saved_files)} files")
+        if reembedded_files:
+            print(f"[save-extracted-texts] Re-embedded {len(reembedded_files)} documents")
+
         return jsonify({
-            "message": f"Saved {len(saved_files)} text files",
-            "files": saved_files
+            "message": ", ".join(message_parts),
+            "files": saved_files,
+            "reembedded": reembedded_files
         })
     except Exception as e:
         print(f"[save-extracted-texts] ERROR: {str(e)}")

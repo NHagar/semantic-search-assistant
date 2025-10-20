@@ -147,7 +147,10 @@ class VectorDB:
             return {"total_chunks": 0, "unique_files": 0, "filenames": []}
 
     def get_document_by_filename(self, filename: str) -> Dict[str, Any]:
-        """Retrieve a document's full text by reassembling its chunks.
+        """Retrieve a document's full text from the original txt file.
+
+        This avoids the duplicate text issue that occurs when reassembling
+        from overlapping chunks.
 
         Args:
             filename: The filename to retrieve
@@ -156,29 +159,33 @@ class VectorDB:
             Dictionary with filename and reconstructed text
         """
         try:
-            results = self.collection.get()
-            if not results or not results["metadatas"]:
+            # Load from the original txt file to avoid overlap duplication
+            txt_file = self.data_dir / filename
+            if txt_file.exists():
+                with open(txt_file, "r", encoding="utf-8") as f:
+                    full_text = f.read().strip()
+
+                # Get chunk metadata for compatibility
+                results = self.collection.get()
+                document_chunks = []
+                if results and results["metadatas"]:
+                    for metadata in results["metadatas"]:
+                        if metadata.get("filename") == filename:
+                            document_chunks.append(
+                                {
+                                    "chunk_id": metadata.get("chunk_id", 0),
+                                    "content": metadata.get("content", ""),
+                                    "citation_key": metadata.get("citation_key", ""),
+                                }
+                            )
+                    document_chunks.sort(key=lambda x: x["chunk_id"])
+
+                return {"filename": filename, "text": full_text, "chunks": document_chunks}
+            else:
+                # File doesn't exist - this shouldn't happen in normal operation
+                print(f"Warning: txt file not found for {filename}")
                 return {"filename": filename, "text": "", "chunks": []}
 
-            # Filter chunks for this filename and sort by chunk_id
-            document_chunks = []
-            for i, metadata in enumerate(results["metadatas"]):
-                if metadata.get("filename") == filename:
-                    document_chunks.append(
-                        {
-                            "chunk_id": metadata.get("chunk_id", 0),
-                            "content": metadata.get("content", ""),
-                            "citation_key": metadata.get("citation_key", ""),
-                        }
-                    )
-
-            # Sort by chunk_id to get proper order
-            document_chunks.sort(key=lambda x: x["chunk_id"])
-
-            # Reconstruct full text from chunks
-            full_text = " ".join([chunk["content"] for chunk in document_chunks])
-
-            return {"filename": filename, "text": full_text, "chunks": document_chunks}
         except Exception as e:
             print(f"Error getting document {filename}: {e}")
             return {"filename": filename, "text": "", "chunks": []}
@@ -228,6 +235,73 @@ class VectorDB:
                 return False
         except Exception as e:
             print(f"Error deleting document {filename}: {e}")
+            return False
+
+    def reembed_document(
+        self, filename: str, chunk_size: int = 512, overlap: int = 50
+    ) -> bool:
+        """Re-embed a single document by deleting old chunks and creating new ones.
+
+        This is useful when a document has been edited and needs to be re-indexed.
+
+        Args:
+            filename: The filename to re-embed
+            chunk_size: Token chunk size for embedding
+            overlap: Token overlap between chunks
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Read the current txt file
+            txt_file = self.data_dir / filename
+            if not txt_file.exists():
+                print(f"Error: txt file not found for {filename}")
+                return False
+
+            with open(txt_file, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+
+            if not content:
+                print(f"Error: empty content for {filename}")
+                return False
+
+            # Delete existing chunks
+            self.delete_document(filename)
+
+            # Create new chunks
+            chunks = self.chunk_text(content, chunk_size, overlap)
+            embeddings = self.embed_texts(
+                [f"search_document: {chunk}" for chunk in chunks]
+            )
+
+            # Create compact citation keys using filename hash + chunk number
+            filename_hash = hashlib.md5(filename.encode()).hexdigest()[:6]
+            citation_keys = [f"{filename_hash}:{i}" for i in range(len(chunks))]
+
+            # Add new chunks to the collection
+            self.collection.add(
+                ids=citation_keys,
+                documents=chunks,
+                metadatas=[
+                    {
+                        "filename": filename,
+                        "path": str(txt_file),
+                        "chunk_id": i,
+                        "citation_key": citation_keys[i],
+                        "content": chunk,
+                        "original_length": len(content),
+                    }
+                    for i, chunk in enumerate(chunks)
+                ],
+                embeddings=embeddings,
+            )
+
+            print(f"Re-embedded {filename} with {len(chunks)} chunks")
+            return True
+
+        except Exception as e:
+            print(f"Error re-embedding document {filename}: {e}")
             return False
 
     def embed_texts(self, texts: List[str]) -> List[float]:
