@@ -3,9 +3,8 @@
 Flask web API for the semantic search assistant.
 """
 
-import os
+import traceback
 from pathlib import Path
-from typing import Optional
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -175,6 +174,81 @@ def upload_files():
             "skipped": skipped_files
         }
     )
+
+
+@app.route("/api/save-extracted-texts", methods=["POST"])
+def save_extracted_texts():
+    """Save extracted and potentially edited text from PDFs to txt files and re-embed them."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+    document_texts = data.get("document_texts", {})
+    chunk_size = data.get("chunk_size", 1024)
+    overlap = data.get("overlap", 20)
+
+    if not corpus_name:
+        return jsonify({"error": "corpus_name is required"}), 400
+
+    if not document_texts:
+        return jsonify({"error": "document_texts is required"}), 400
+
+    try:
+        print(f"[save-extracted-texts] LLM: {llm}, Corpus: {corpus_name}")
+        print(f"[save-extracted-texts] Received {len(document_texts)} documents")
+
+        # Get API instance to access the project directory
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        print(f"[save-extracted-texts] API instance data_dir: {api.data_dir}")
+
+        txt_dir = Path(api.data_dir)
+        txt_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[save-extracted-texts] Created directory: {txt_dir}")
+
+        saved_files = []
+        reembedded_files = []
+
+        # Save each document's text to a .txt file
+        for pdf_filename, text_content in document_texts.items():
+            print(f"[save-extracted-texts] Processing: {pdf_filename}")
+            # Convert PDF filename to txt filename
+            txt_filename = Path(pdf_filename).stem + ".txt"
+            txt_filepath = txt_dir / txt_filename
+
+            # Write the text content
+            with open(txt_filepath, "w", encoding="utf-8") as f:
+                f.write(text_content)
+
+            saved_files.append(txt_filename)
+            print(f"[save-extracted-texts] Saved: {txt_filepath}")
+
+            # Re-embed the document if it was already in the vector database
+            if api.vector_db.is_document_processed(txt_filename):
+                print(f"[save-extracted-texts] Re-embedding: {txt_filename}")
+                success = api.vector_db.reembed_document(
+                    txt_filename, chunk_size=chunk_size, overlap=overlap
+                )
+                if success:
+                    reembedded_files.append(txt_filename)
+                else:
+                    print(f"[save-extracted-texts] Failed to re-embed: {txt_filename}")
+
+        message_parts = [f"Saved {len(saved_files)} text files"]
+        if reembedded_files:
+            message_parts.append(f"re-embedded {len(reembedded_files)} documents")
+
+        print(f"[save-extracted-texts] Successfully saved {len(saved_files)} files")
+        if reembedded_files:
+            print(f"[save-extracted-texts] Re-embedded {len(reembedded_files)} documents")
+
+        return jsonify({
+            "message": ", ".join(message_parts),
+            "files": saved_files,
+            "reembedded": reembedded_files
+        })
+    except Exception as e:
+        print(f"[save-extracted-texts] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/extract-documents", methods=["POST"])
@@ -581,6 +655,48 @@ def cleanup_working_files():
         api.cleanup_working_files()
         return jsonify({"message": "Working files cleaned up successfully"})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/get-embedded-documents", methods=["GET"])
+def get_embedded_documents():
+    """Get all documents from the vector database."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        documents = api.get_all_embedded_documents()
+        return jsonify({"documents": documents})
+    except Exception as e:
+        print(f"[get-embedded-documents] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/delete-embedded-document", methods=["POST"])
+def delete_embedded_document():
+    """Delete a document from the vector database and its source files."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+    filename = data.get("filename", "")
+    delete_source_files = data.get("delete_source_files", True)
+
+    if not filename:
+        return jsonify({"error": "filename is required"}), 400
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        success = api.delete_embedded_document(filename, delete_source_files=delete_source_files)
+
+        if success:
+            return jsonify({"message": f"Deleted document: {filename}"})
+        else:
+            return jsonify({"error": f"Document not found: {filename}"}), 404
+    except Exception as e:
+        print(f"[delete-embedded-document] ERROR: {str(e)}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

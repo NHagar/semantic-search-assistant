@@ -117,7 +117,7 @@ def extract_pdfs_to_txt(data_dir, output_dir=None, verbose=True):
         )
 
     if verbose:
-        print(f"\nExtraction complete!")
+        print("\nExtraction complete!")
         print(f"Processed {len(results)} files")
         total_tokens = sum(r["token_count"] for r in results)
         print(f"Total tokens available: {total_tokens}")

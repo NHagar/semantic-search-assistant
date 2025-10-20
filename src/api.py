@@ -561,6 +561,22 @@ class SemanticSearchAPI:
         """
         return self.vector_db.semantic_search(query, n_results=n_results)
 
+    def get_all_embedded_documents(self) -> List[Dict[str, Any]]:
+        """Get all documents from the vector database with their reconstructed text."""
+        return self.vector_db.get_all_documents()
+
+    def delete_embedded_document(self, filename: str, delete_source_files: bool = True) -> bool:
+        """Delete a document from the vector database and optionally remove source files.
+
+        Args:
+            filename: The filename to delete
+            delete_source_files: If True, also delete the .txt and PDF source files
+
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.vector_db.delete_document(filename, delete_source_files=delete_source_files)
+
     def build_vector_database(self, chunk_size: int = 1024, overlap: int = 20) -> Dict[str, Any]:
         """
         Build or update the vector database from existing txt files.

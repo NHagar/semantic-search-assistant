@@ -13,7 +13,7 @@
 
   // Components
   import ProjectManager from "./lib/ProjectManager.svelte";
-  import FileUpload from "./lib/FileUpload.svelte";
+  import DocumentUploadEditor from "./lib/DocumentUploadEditor.svelte";
   import DocumentDescription from "./lib/DocumentDescription.svelte";
   import SearchPlans from "./lib/SearchPlans.svelte";
   import SearchExecution from "./lib/SearchExecution.svelte";
@@ -311,9 +311,9 @@
       {#if currentStepValue === 0}
         <div class="step-panel">
           <h2>Upload Documents</h2>
-          <p>Upload PDF documents that you want to research and analyze.</p>
+          <p>Upload PDF documents, review and edit extracted text, then embed them for semantic search.</p>
 
-          <FileUpload on:extracted={handleDocumentsExtracted} />
+          <DocumentUploadEditor on:extracted={handleDocumentsExtracted} />
         </div>
       {:else if currentStepValue === 1}
         <div class="step-panel">
