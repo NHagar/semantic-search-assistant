@@ -34,6 +34,14 @@ export const apiService = {
     return response.data;
   },
 
+  async saveExtractedTexts(documentTexts, llm = null, corpusName = null) {
+    const requestData = { document_texts: documentTexts };
+    if (llm) requestData.llm = llm;
+    if (corpusName) requestData.corpus_name = corpusName;
+    const response = await api.post('/save-extracted-texts', requestData);
+    return response.data;
+  },
+
   async extractDocuments(llm = null, corpusName = null) {
     const requestData = {};
     if (llm) requestData.llm = llm;

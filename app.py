@@ -177,6 +177,48 @@ def upload_files():
     )
 
 
+@app.route("/api/save-extracted-texts", methods=["POST"])
+def save_extracted_texts():
+    """Save extracted and potentially edited text from PDFs to txt files."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+    document_texts = data.get("document_texts", {})
+
+    if not corpus_name:
+        return jsonify({"error": "corpus_name is required"}), 400
+
+    if not document_texts:
+        return jsonify({"error": "document_texts is required"}), 400
+
+    try:
+        # Get API instance to access the project directory
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        txt_dir = Path(api.txts_dir)
+        txt_dir.mkdir(parents=True, exist_ok=True)
+
+        saved_files = []
+
+        # Save each document's text to a .txt file
+        for pdf_filename, text_content in document_texts.items():
+            # Convert PDF filename to txt filename
+            txt_filename = Path(pdf_filename).stem + ".txt"
+            txt_filepath = txt_dir / txt_filename
+
+            # Write the text content
+            with open(txt_filepath, "w", encoding="utf-8") as f:
+                f.write(text_content)
+
+            saved_files.append(txt_filename)
+
+        return jsonify({
+            "message": f"Saved {len(saved_files)} text files",
+            "files": saved_files
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/extract-documents", methods=["POST"])
 def extract_documents():
     """Extract text from PDF documents to txt files and build vector database."""
