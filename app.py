@@ -676,18 +676,19 @@ def get_embedded_documents():
 
 @app.route("/api/delete-embedded-document", methods=["POST"])
 def delete_embedded_document():
-    """Delete a document from the vector database."""
+    """Delete a document from the vector database and its source files."""
     data = request.get_json() or {}
     llm = data.get("llm", "qwen/qwen3-14b")
     corpus_name = data.get("corpus_name", "")
     filename = data.get("filename", "")
+    delete_source_files = data.get("delete_source_files", True)
 
     if not filename:
         return jsonify({"error": "filename is required"}), 400
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        success = api.delete_embedded_document(filename)
+        success = api.delete_embedded_document(filename, delete_source_files=delete_source_files)
 
         if success:
             return jsonify({"message": f"Deleted document: {filename}"})

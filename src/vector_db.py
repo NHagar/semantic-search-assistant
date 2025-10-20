@@ -205,11 +205,12 @@ class VectorDB:
 
         return documents
 
-    def delete_document(self, filename: str) -> bool:
-        """Delete all chunks for a specific document.
+    def delete_document(self, filename: str, delete_source_files: bool = True) -> bool:
+        """Delete all chunks for a specific document and optionally remove source files.
 
         Args:
             filename: The filename to delete
+            delete_source_files: If True, also delete the .txt file and corresponding PDF
 
         Returns:
             True if successful, False otherwise
@@ -227,8 +228,26 @@ class VectorDB:
                     citation_keys_to_delete.append(citation_key)
 
             if citation_keys_to_delete:
+                # Delete from vector database
                 self.collection.delete(ids=citation_keys_to_delete)
                 print(f"Deleted {len(citation_keys_to_delete)} chunks for {filename}")
+
+                # Delete source files if requested
+                if delete_source_files:
+                    # Delete .txt file
+                    txt_file = self.data_dir / filename
+                    if txt_file.exists():
+                        txt_file.unlink()
+                        print(f"Deleted txt file: {txt_file}")
+
+                    # Delete corresponding PDF file (if it exists)
+                    # Convert .txt filename back to .pdf
+                    pdf_filename = filename.replace(".txt", ".pdf")
+                    pdf_file = self.project_manager.pdfs_dir / pdf_filename
+                    if pdf_file.exists():
+                        pdf_file.unlink()
+                        print(f"Deleted PDF file: {pdf_file}")
+
                 return True
             else:
                 print(f"No chunks found for {filename}")
@@ -266,8 +285,8 @@ class VectorDB:
                 print(f"Error: empty content for {filename}")
                 return False
 
-            # Delete existing chunks
-            self.delete_document(filename)
+            # Delete existing chunks (but keep source files since we're re-embedding)
+            self.delete_document(filename, delete_source_files=False)
 
             # Create new chunks
             chunks = self.chunk_text(content, chunk_size, overlap)
