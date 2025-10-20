@@ -191,15 +191,22 @@ def save_extracted_texts():
         return jsonify({"error": "document_texts is required"}), 400
 
     try:
+        print(f"[save-extracted-texts] LLM: {llm}, Corpus: {corpus_name}")
+        print(f"[save-extracted-texts] Received {len(document_texts)} documents")
+
         # Get API instance to access the project directory
         api = get_api(llm=llm, corpus_name=corpus_name)
-        txt_dir = Path(api.txts_dir)
+        print(f"[save-extracted-texts] API instance data_dir: {api.data_dir}")
+
+        txt_dir = Path(api.data_dir)
         txt_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[save-extracted-texts] Created directory: {txt_dir}")
 
         saved_files = []
 
         # Save each document's text to a .txt file
         for pdf_filename, text_content in document_texts.items():
+            print(f"[save-extracted-texts] Processing: {pdf_filename}")
             # Convert PDF filename to txt filename
             txt_filename = Path(pdf_filename).stem + ".txt"
             txt_filepath = txt_dir / txt_filename
@@ -209,12 +216,16 @@ def save_extracted_texts():
                 f.write(text_content)
 
             saved_files.append(txt_filename)
+            print(f"[save-extracted-texts] Saved: {txt_filepath}")
 
+        print(f"[save-extracted-texts] Successfully saved {len(saved_files)} files")
         return jsonify({
             "message": f"Saved {len(saved_files)} text files",
             "files": saved_files
         })
     except Exception as e:
+        print(f"[save-extracted-texts] ERROR: {str(e)}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
