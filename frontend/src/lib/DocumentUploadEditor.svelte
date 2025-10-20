@@ -279,8 +279,13 @@
                 {/if}
               </div>
               {#if !doc.extracting}
-                <button class="remove-btn" on:click|stopPropagation={() => removeDocument(index)}>
-                  ×
+                <button class="remove-btn" on:click|stopPropagation={() => removeDocument(index)} title="Remove document">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3,6 5,6 21,6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <line x1="10" y1="11" x2="10" y2="17" />
+                    <line x1="14" y1="11" x2="14" y2="17" />
+                  </svg>
                 </button>
               {/if}
             </div>
@@ -510,23 +515,33 @@
   }
 
   .remove-btn {
-    background: #ff4444;
-    color: white;
+    background: transparent;
+    color: #999;
     border: none;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
     cursor: pointer;
-    font-size: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     margin-left: 8px;
+    transition: all 0.2s;
+    padding: 4px;
   }
 
   .remove-btn:hover {
-    background: #cc0000;
+    background: #ffebee;
+    color: #d32f2f;
+  }
+
+  .remove-btn svg {
+    transition: transform 0.2s;
+  }
+
+  .remove-btn:hover svg {
+    transform: scale(1.1);
   }
 
   .editor-area {
