@@ -3,9 +3,8 @@
 Flask web API for the semantic search assistant.
 """
 
-import os
+import traceback
 from pathlib import Path
-from typing import Optional
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS

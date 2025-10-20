@@ -1,5 +1,4 @@
 import hashlib
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import chromadb
@@ -16,7 +15,7 @@ class VectorDB:
         collection_name: str = "documents",
         corpus_name: str = "",
         model_name: str = "",
-        project_manager: Optional[ProjectManager] = None
+        project_manager: Optional[ProjectManager] = None,
     ):
         """
         Initialize VectorDB.
@@ -165,11 +164,13 @@ class VectorDB:
             document_chunks = []
             for i, metadata in enumerate(results["metadatas"]):
                 if metadata.get("filename") == filename:
-                    document_chunks.append({
-                        "chunk_id": metadata.get("chunk_id", 0),
-                        "content": metadata.get("content", ""),
-                        "citation_key": metadata.get("citation_key", "")
-                    })
+                    document_chunks.append(
+                        {
+                            "chunk_id": metadata.get("chunk_id", 0),
+                            "content": metadata.get("content", ""),
+                            "citation_key": metadata.get("citation_key", ""),
+                        }
+                    )
 
             # Sort by chunk_id to get proper order
             document_chunks.sort(key=lambda x: x["chunk_id"])
@@ -177,11 +178,7 @@ class VectorDB:
             # Reconstruct full text from chunks
             full_text = " ".join([chunk["content"] for chunk in document_chunks])
 
-            return {
-                "filename": filename,
-                "text": full_text,
-                "chunks": document_chunks
-            }
+            return {"filename": filename, "text": full_text, "chunks": document_chunks}
         except Exception as e:
             print(f"Error getting document {filename}: {e}")
             return {"filename": filename, "text": "", "chunks": []}
@@ -197,10 +194,7 @@ class VectorDB:
 
         for filename in sorted(filenames):
             doc = self.get_document_by_filename(filename)
-            documents.append({
-                "filename": doc["filename"],
-                "text": doc["text"]
-            })
+            documents.append({"filename": doc["filename"], "text": doc["text"]})
 
         return documents
 

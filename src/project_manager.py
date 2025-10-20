@@ -7,7 +7,7 @@ and file operations, ensuring proper isolation between projects.
 
 from pathlib import Path
 import shutil
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 def sanitize_name(name: str) -> str:
@@ -115,22 +115,25 @@ class ProjectManager:
         # If no working files, try to get count from vector database
         try:
             import chromadb
-            if self.chroma_db_dir.exists():
-                chroma_client = chromadb.PersistentClient(path=str(self.chroma_db_dir))
-                try:
-                    collection = chroma_client.get_collection(name="documents")
-                    results = collection.get()
-                    if results and results.get("metadatas"):
-                        # Count unique filenames
-                        filenames = set()
-                        for metadata in results["metadatas"]:
-                            if metadata.get("filename"):
-                                filenames.add(metadata["filename"])
-                        return len(filenames)
-                except:
-                    pass
-        except:
-            pass
+        except Exception:
+            return 0
+
+        if not self.chroma_db_dir.exists():
+            return 0
+
+        try:
+            chroma_client = chromadb.PersistentClient(path=str(self.chroma_db_dir))
+            collection = chroma_client.get_collection(name="documents")
+            results = collection.get()
+            if results and results.get("metadatas"):
+                # Count unique filenames
+                filenames = set()
+                for metadata in results["metadatas"]:
+                    if metadata.get("filename"):
+                        filenames.add(metadata["filename"])
+                return len(filenames)
+        except Exception:
+            return 0
 
         return 0
 
