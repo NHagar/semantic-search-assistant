@@ -8,7 +8,7 @@
 
   let fileInput;
   let dragActive = false;
-  let documents = []; // Array of {file, name, text, extracting, error, isExisting, isModified}
+  let documents = []; // Array of {file, name, text, extracting, error, isExisting, isModified, isUploadedFromServer}
   let selectedDocIndex = 0;
   let editedText = '';
   let llm = 'qwen/qwen3-14b';
@@ -31,39 +31,63 @@
     ).href;
 
     // Load existing documents from vector database
-    await loadExistingDocuments();
+    await loadProjectDocuments();
   });
 
-  async function loadExistingDocuments() {
+  async function loadProjectDocuments() {
     if (!corpus || !llm) {
       return;
     }
 
     loading = true;
     try {
-      const response = await apiService.getEmbeddedDocuments(llm, corpus);
-      if (response.documents && response.documents.length > 0) {
-        // Load existing documents from the vector database
-        documents = response.documents.map(doc => ({
-          file: null, // No file object for existing docs
+      const [uploadedResponse, embeddedResponse] = await Promise.all([
+        apiService.getUploadedDocuments(llm, corpus),
+        apiService.getEmbeddedDocuments(llm, corpus)
+      ]);
+
+      const embeddedDocs = (embeddedResponse.documents || []).map(doc => ({
+        file: null,
+        name: doc.filename,
+        text: doc.text,
+        extracting: false,
+        error: null,
+        isExisting: true,
+        isModified: false,
+        isUploadedFromServer: false
+      }));
+
+      // Store original texts for existing documents
+      originalTexts = {};
+      embeddedDocs.forEach(doc => {
+        originalTexts[doc.name] = doc.text;
+      });
+
+      const embeddedNames = new Set(embeddedDocs.map(doc => doc.name));
+
+      const uploadedDocs = (uploadedResponse.documents || [])
+        .filter(doc => !embeddedNames.has(doc.filename))
+        .map(doc => ({
+          file: null,
           name: doc.filename,
-          text: doc.text,
+          text: '',
           extracting: false,
           error: null,
-          isExisting: true,
-          isModified: false
+          isExisting: false,
+          isModified: false,
+          isUploadedFromServer: true,
+          size: doc.size,
+          uploadedAt: doc.uploaded_at
         }));
 
-        // Store original texts
-        response.documents.forEach(doc => {
-          originalTexts[doc.filename] = doc.text;
-        });
+      documents = [...embeddedDocs, ...uploadedDocs];
 
-        // Select first document
-        if (documents.length > 0) {
-          selectedDocIndex = 0;
-          editedText = documents[0].text;
-        }
+      if (documents.length > 0) {
+        selectedDocIndex = 0;
+        editedText = documents[0].text || '';
+      } else {
+        selectedDocIndex = 0;
+        editedText = '';
       }
     } catch (err) {
       console.error('Failed to load existing documents:', err);
@@ -133,7 +157,8 @@
         extracting: true,
         error: null,
         isExisting: false,
-        isModified: false
+        isModified: false,
+        isUploadedFromServer: false
       };
 
       documents = [...documents, doc];
@@ -189,6 +214,13 @@
         delete originalTexts[doc.name];
       } catch (err) {
         setError(`Failed to delete document: ${err.message}`);
+        return;
+      }
+    } else if (doc.isUploadedFromServer) {
+      try {
+        await apiService.deleteUploadedDocument(doc.name, llm, corpus);
+      } catch (err) {
+        setError(`Failed to delete uploaded document: ${err.message}`);
         return;
       }
     }
@@ -259,12 +291,17 @@
       const newDocuments = documents.filter(doc => !doc.isExisting);
       const modifiedDocuments = documents.filter(doc => doc.isExisting && doc.isModified);
       const unchangedDocuments = documents.filter(doc => doc.isExisting && !doc.isModified);
+      const serverUploadedDocuments = newDocuments.filter(doc => doc.isUploadedFromServer);
 
-      console.log(`New: ${newDocuments.length}, Modified: ${modifiedDocuments.length}, Unchanged: ${unchangedDocuments.length}`);
+      console.log(
+        `New: ${newDocuments.length}, Modified: ${modifiedDocuments.length}, ` +
+        `Unchanged: ${unchangedDocuments.length}, Server uploads: ${serverUploadedDocuments.length}`
+      );
 
-      // Upload PDF files for new documents
-      if (newDocuments.length > 0) {
-        const filesToUpload = newDocuments.map(doc => doc.file).filter(f => f !== null);
+      // Upload PDF files for new documents that originated from the browser
+      const browserUploadedDocuments = newDocuments.filter(doc => !doc.isUploadedFromServer);
+      if (browserUploadedDocuments.length > 0) {
+        const filesToUpload = browserUploadedDocuments.map(doc => doc.file).filter(f => f !== null);
         if (filesToUpload.length > 0) {
           await apiService.uploadFiles(filesToUpload, llm, corpus);
         }
@@ -275,8 +312,9 @@
         await apiService.deleteEmbeddedDocument(doc.name, llm, corpus);
       }
 
-      // Save text for new and modified documents
-      const documentsToSave = [...newDocuments, ...modifiedDocuments];
+      // Save text for new and modified documents that have editable content
+      const documentsToSave = [...browserUploadedDocuments, ...modifiedDocuments];
+      let shouldRebuild = false;
       if (documentsToSave.length > 0) {
         const documentTexts = {};
         documentsToSave.forEach(doc => {
@@ -285,22 +323,33 @@
 
         // Save the edited texts to the backend
         await apiService.saveExtractedTexts(documentTexts, llm, corpus);
+        shouldRebuild = true;
+      }
 
-        // Build the vector database with the new/modified texts
+      if (serverUploadedDocuments.length > 0) {
+        shouldRebuild = true;
+      }
+
+      if (shouldRebuild) {
+        // Build or rebuild the vector database to include newly uploaded files
         await apiService.extractDocuments(llm, corpus);
       }
 
-      // Update all documents to be marked as existing and unmodified
+      // Update all documents to be marked as existing and unmodified locally
       documents = documents.map(doc => ({
         ...doc,
         isExisting: true,
-        isModified: false
+        isModified: false,
+        isUploadedFromServer: false
       }));
 
-      // Update original texts
+      // Update original texts with the latest edits we have locally
       documents.forEach(doc => {
         originalTexts[doc.name] = doc.text;
       });
+
+      // Refresh the document list from the backend so the UI reflects uploaded-only files as embedded
+      await loadProjectDocuments();
 
       dispatch('extracted', { documents: documents });
       setError(null);
@@ -318,6 +367,15 @@
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  function formatUploadDate(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    return date.toLocaleString();
   }
 </script>
 
@@ -390,6 +448,20 @@
                     </svg>
                     <span>Modified</span>
                   </div>
+                {:else if doc.isUploadedFromServer}
+                  <div class="status uploaded">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="4,14 10,20 20,6" />
+                    </svg>
+                    <span>Uploaded</span>
+                  </div>
+                {:else if doc.isExisting}
+                  <div class="status embedded">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polyline points="20,6 9,17 4,12" />
+                    </svg>
+                    <span>Embedded</span>
+                  </div>
                 {:else}
                   <div class="status success">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -421,6 +493,8 @@
             <h3>{documents[selectedDocIndex].name}</h3>
             {#if documents[selectedDocIndex].file}
               <span class="file-size">{formatFileSize(documents[selectedDocIndex].file.size)}</span>
+            {:else if documents[selectedDocIndex].size}
+              <span class="file-size">{formatFileSize(documents[selectedDocIndex].size)}</span>
             {/if}
           </div>
 
@@ -437,6 +511,21 @@
                 <line x1="9" y1="9" x2="15" y2="15" />
               </svg>
               <p>Failed to extract text: {documents[selectedDocIndex].error}</p>
+            </div>
+          {:else if documents[selectedDocIndex].isUploadedFromServer}
+            <div class="info-message">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7,10 12,15 17,10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <div>
+                <p>This document was previously uploaded and is waiting to be embedded.</p>
+                <p class="info-subtext">Run "Embed & Continue" to process it, or re-upload the PDF to edit the extracted text before embedding.</p>
+                {#if documents[selectedDocIndex].uploadedAt}
+                  <p class="info-meta">Uploaded on {formatUploadDate(documents[selectedDocIndex].uploadedAt)}</p>
+                {/if}
+              </div>
             </div>
           {:else}
             <textarea
@@ -631,6 +720,14 @@
     color: #4CAF50;
   }
 
+  .status.uploaded {
+    color: #3F51B5;
+  }
+
+  .status.embedded {
+    color: #009688;
+  }
+
   .status.modified {
     color: #FF9800;
   }
@@ -750,6 +847,38 @@
 
   .error-message {
     color: #f44336;
+  }
+
+  .info-message {
+    flex: 1;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    background: #f5f7ff;
+    border-radius: 8px;
+    padding: 32px;
+    color: #3F51B5;
+  }
+
+  .info-message svg {
+    flex-shrink: 0;
+  }
+
+  .info-message p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .info-subtext {
+    margin-top: 4px;
+    color: #3949AB;
+  }
+
+  .info-meta {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #5C6BC0;
   }
 
   .extraction-message p,

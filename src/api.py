@@ -7,6 +7,7 @@ previously available as sequential scripts.
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -564,6 +565,33 @@ class SemanticSearchAPI:
     def get_all_embedded_documents(self) -> List[Dict[str, Any]]:
         """Get all documents from the vector database with their reconstructed text."""
         return self.vector_db.get_all_documents()
+
+    def get_uploaded_documents(self) -> List[Dict[str, Any]]:
+        """List uploaded PDF documents that may not have been embedded yet."""
+        documents: List[Dict[str, Any]] = []
+        for pdf_path in self.project_manager.list_pdfs():
+            stats = pdf_path.stat()
+            documents.append(
+                {
+                    "filename": pdf_path.name,
+                    "size": stats.st_size,
+                    "uploaded_at": datetime.fromtimestamp(stats.st_mtime).isoformat(),
+                }
+            )
+        return documents
+
+    def delete_uploaded_document(self, filename: str) -> bool:
+        """Remove an uploaded PDF and any associated extracted text."""
+        if not filename.lower().endswith(".pdf"):
+            filename = f"{filename}.pdf"
+
+        deleted = self.project_manager.delete_pdf(filename)
+
+        # Also delete any extracted text that may exist for this file
+        txt_filename = filename.replace(".pdf", ".txt")
+        self.project_manager.delete_txt(txt_filename)
+
+        return deleted
 
     def delete_embedded_document(self, filename: str, delete_source_files: bool = True) -> bool:
         """Delete a document from the vector database and optionally remove source files.

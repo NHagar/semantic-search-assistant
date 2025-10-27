@@ -88,6 +88,22 @@ class ProjectManager:
             return []
         return sorted(self.txt_dir.glob("*.txt"))
 
+    def delete_pdf(self, filename: str) -> bool:
+        """Delete a PDF from the working directory if it exists."""
+        pdf_path = self.get_pdf_path(filename)
+        if pdf_path.exists():
+            pdf_path.unlink()
+            return True
+        return False
+
+    def delete_txt(self, filename: str) -> bool:
+        """Delete a txt file from the working directory if it exists."""
+        txt_path = self.get_txt_path(filename)
+        if txt_path.exists():
+            txt_path.unlink()
+            return True
+        return False
+
     def list_outputs(self) -> List[Path]:
         """List all output files."""
         if not self.outputs_dir.exists():

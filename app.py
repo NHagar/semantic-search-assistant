@@ -674,6 +674,22 @@ def get_embedded_documents():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/get-uploaded-documents", methods=["GET"])
+def get_uploaded_documents():
+    """Get all uploaded PDF documents for a project."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        documents = api.get_uploaded_documents()
+        return jsonify({"documents": documents})
+    except Exception as e:
+        print(f"[get-uploaded-documents] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/delete-embedded-document", methods=["POST"])
 def delete_embedded_document():
     """Delete a document from the vector database and its source files."""
@@ -696,6 +712,31 @@ def delete_embedded_document():
             return jsonify({"error": f"Document not found: {filename}"}), 404
     except Exception as e:
         print(f"[delete-embedded-document] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/delete-uploaded-document", methods=["POST"])
+def delete_uploaded_document():
+    """Delete an uploaded PDF that has not been embedded yet."""
+    data = request.get_json() or {}
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+    filename = data.get("filename", "")
+
+    if not filename:
+        return jsonify({"error": "filename is required"}), 400
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        success = api.delete_uploaded_document(filename)
+
+        if success:
+            return jsonify({"message": f"Deleted uploaded document: {filename}"})
+        else:
+            return jsonify({"error": f"Uploaded document not found: {filename}"}), 404
+    except Exception as e:
+        print(f"[delete-uploaded-document] ERROR: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
