@@ -224,11 +224,27 @@ export const apiService = {
     return response.data;
   },
 
+  async getUploadedDocuments(llm = null, corpusName = null) {
+    const params = new URLSearchParams();
+    if (llm) params.append('llm', llm);
+    if (corpusName) params.append('corpus_name', corpusName);
+    const response = await api.get(`/get-uploaded-documents?${params.toString()}`);
+    return response.data;
+  },
+
   async deleteEmbeddedDocument(filename, llm = null, corpusName = null) {
     const requestData = { filename };
     if (llm) requestData.llm = llm;
     if (corpusName) requestData.corpus_name = corpusName;
     const response = await api.post('/delete-embedded-document', requestData);
+    return response.data;
+  },
+
+  async deleteUploadedDocument(filename, llm = null, corpusName = null) {
+    const requestData = { filename };
+    if (llm) requestData.llm = llm;
+    if (corpusName) requestData.corpus_name = corpusName;
+    const response = await api.post('/delete-uploaded-document', requestData);
     return response.data;
   },
 };
