@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from werkzeug.utils import secure_filename
 
 from .extract_and_sample_pdfs import (
@@ -413,26 +413,28 @@ class SemanticSearchAPI:
                 f"Number of plans ({len(plans)}) and reports ({len(reports)}) do not match."
             )
 
-        passed_reports = []
+        passed_reports: List[str] = []
+        sanitized_reports: List[str] = []
 
         # Evaluate each report
         for plan, report in zip(plans, reports):
             with open(plan, "r") as f:
                 plan_content = f.read()
             with open(report, "r") as f:
-                report_content = f.read().split("</think>")
-                if len(report_content) > 1:
+                report_sections = f.read().split("</think>")
+                if len(report_sections) > 1:
                     report_content = (
-                        report_content[1]
+                        report_sections[1]
                         .split("=== SEARCH AGENT DEBUG LOG ===")[0]
                         .strip()
                     )
                 else:
                     report_content = (
-                        report_content[0]
+                        report_sections[0]
                         .split("=== SEARCH AGENT DEBUG LOG ===")[0]
                         .strip()
                     )
+            sanitized_reports.append(report_content)
 
             user_input = f"""<SEARCH PLAN>
 {plan_content}
@@ -461,12 +463,40 @@ class SemanticSearchAPI:
 
             content = response.choices[0].message.content
             if content is None:
-                raise ValueError("Received empty response from LLM during evaluation")
-            data = json.loads(_strip_fences(content))
-            report_evaluation: Evaluation = Evaluation.model_validate(data)
+                print(
+                    "[evaluate_and_synthesize] Warning: Empty response from LLM during "
+                    "evaluation; skipping report."
+                )
+                continue
+
+            cleaned_content = _strip_fences(content)
+            try:
+                data = json.loads(cleaned_content)
+            except json.JSONDecodeError as exc:
+                print(
+                    "[evaluate_and_synthesize] Warning: Could not decode evaluation "
+                    f"response as JSON: {exc}. Raw content: {cleaned_content!r}"
+                )
+                continue
+
+            try:
+                report_evaluation: Evaluation = Evaluation.model_validate(data)
+            except ValidationError as exc:
+                print(
+                    "[evaluate_and_synthesize] Warning: Evaluation response failed "
+                    f"validation: {exc}. Raw content: {cleaned_content!r}"
+                )
+                continue
 
             if report_evaluation.is_relevant and report_evaluation.is_thorough:
                 passed_reports.append(report_content)
+
+        if not passed_reports:
+            print(
+                "[evaluate_and_synthesize] Warning: No reports passed evaluation; "
+                "falling back to using all available reports for synthesis."
+            )
+            passed_reports = sanitized_reports
 
         # Synthesize final report
         user_input = f"""<USER REQUEST>
@@ -486,7 +516,12 @@ class SemanticSearchAPI:
             ],
         )
 
+        if not response.choices:
+            raise ValueError("Received no choices from LLM during synthesis")
+
         final_report = response.choices[0].message.content
+        if final_report is None:
+            raise ValueError("Received empty response from LLM during synthesis")
 
         if output_file is None:
             output_file_path = output_dir / "final_report.md"
