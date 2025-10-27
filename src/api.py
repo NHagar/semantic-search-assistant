@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel
+from werkzeug.utils import secure_filename
 
 from .extract_and_sample_pdfs import (
     extract_pdfs_to_txt,
@@ -582,13 +583,29 @@ class SemanticSearchAPI:
 
     def delete_uploaded_document(self, filename: str) -> bool:
         """Remove an uploaded PDF and any associated extracted text."""
-        if not filename.lower().endswith(".pdf"):
-            filename = f"{filename}.pdf"
+        if not filename:
+            return False
 
-        deleted = self.project_manager.delete_pdf(filename)
+        sanitized_filename = secure_filename(filename)
+        if not sanitized_filename:
+            return False
+
+        if not sanitized_filename.lower().endswith(".pdf"):
+            sanitized_filename = f"{sanitized_filename}.pdf"
+
+        available_pdfs = {pdf_path.name for pdf_path in self.project_manager.list_pdfs()}
+        if sanitized_filename not in available_pdfs:
+            return False
+
+        pdf_path = (self.project_manager.pdfs_dir / sanitized_filename).resolve()
+        pdfs_dir = self.project_manager.pdfs_dir.resolve()
+        if pdfs_dir not in pdf_path.parents:
+            return False
+
+        deleted = self.project_manager.delete_pdf(sanitized_filename)
 
         # Also delete any extracted text that may exist for this file
-        txt_filename = filename.replace(".pdf", ".txt")
+        txt_filename = sanitized_filename.replace(".pdf", ".txt")
         self.project_manager.delete_txt(txt_filename)
 
         return deleted
