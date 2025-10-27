@@ -114,15 +114,24 @@
     return normalized + '.pdf';
   }
 
+  function toTxtFilename(name) {
+    if (!name) return '';
+    if (name.toLowerCase().endsWith('.txt')) {
+      return name;
+    }
+    return name.replace(/\.pdf$/i, '.txt');
+  }
+
   async function addFiles(newFiles) {
     const pdfFiles = newFiles.filter(file => file.type === 'application/pdf');
 
     for (const file of pdfFiles) {
       // Normalize filename to match what backend will save
       const normalizedName = normalizeFilename(file.name);
+      const normalizedTxtName = toTxtFilename(normalizedName);
 
       // Check if file already exists
-      if (documents.some(doc => doc.name === normalizedName)) {
+      if (documents.some(doc => doc.name === normalizedName || doc.name === normalizedTxtName)) {
         continue;
       }
 
@@ -184,9 +193,10 @@
     // If it's an existing document in the vector database, delete it
     if (doc.isExisting) {
       try {
-        await apiService.deleteEmbeddedDocument(doc.name, llm, corpus);
+        const txtName = toTxtFilename(doc.name);
+        await apiService.deleteEmbeddedDocument(txtName, llm, corpus);
         // Also remove from originalTexts
-        delete originalTexts[doc.name];
+        delete originalTexts[txtName];
       } catch (err) {
         setError(`Failed to delete document: ${err.message}`);
         return;
@@ -272,7 +282,7 @@
 
       // For modified documents, delete old embeddings
       for (const doc of modifiedDocuments) {
-        await apiService.deleteEmbeddedDocument(doc.name, llm, corpus);
+        await apiService.deleteEmbeddedDocument(toTxtFilename(doc.name), llm, corpus);
       }
 
       // Save text for new and modified documents
@@ -291,16 +301,23 @@
       }
 
       // Update all documents to be marked as existing and unmodified
-      documents = documents.map(doc => ({
-        ...doc,
-        isExisting: true,
-        isModified: false
-      }));
+      documents = documents.map(doc => {
+        const txtName = toTxtFilename(doc.name);
+        return {
+          ...doc,
+          name: txtName,
+          file: null,
+          isExisting: true,
+          isModified: false
+        };
+      });
 
       // Update original texts
+      const updatedOriginals = {};
       documents.forEach(doc => {
-        originalTexts[doc.name] = doc.text;
+        updatedOriginals[doc.name] = doc.text;
       });
+      originalTexts = updatedOriginals;
 
       dispatch('extracted', { documents: documents });
       setError(null);
