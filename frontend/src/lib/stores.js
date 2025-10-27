@@ -43,6 +43,15 @@ export const steps = [
   { id: 5, title: 'Final Report', description: 'Generate and edit final synthesized report' }
 ];
 
+export const STEP_STATUS = {
+  NOT_STARTED: 'not-started',
+  IN_PROGRESS: 'in-progress',
+  COMPLETED: 'completed',
+  NEEDS_UPDATE: 'needs-update'
+};
+
+export const stepStatuses = writable(steps.map(() => STEP_STATUS.NOT_STARTED));
+
 // Helper functions
 export function setError(message) {
   error.set(message);
