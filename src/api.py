@@ -381,7 +381,7 @@ class SemanticSearchAPI:
         evaluate_prompt_file: str = "prompts/evaluate.md",
         synthesize_prompt_file: str = "prompts/synthesize.md",
         output_file: Optional[str] = None,
-    ) -> str:
+    ) -> tuple[str, dict]:
         """
         Evaluate search reports and synthesize final answer.
 
@@ -392,7 +392,13 @@ class SemanticSearchAPI:
             output_file: Output file for final report
 
         Returns:
-            Final synthesized report
+            Tuple of (final_report, evaluation_metadata)
+            evaluation_metadata contains: {
+                "total_reports": int,
+                "reports_used": int,
+                "reports_discarded": int,
+                "report_evaluations": List[dict] with details for each report
+            }
         """
         with open(evaluate_prompt_file, "r") as f:
             evaluate_prompt = f.read()
@@ -415,9 +421,10 @@ class SemanticSearchAPI:
 
         passed_reports: List[str] = []
         sanitized_reports: List[str] = []
+        report_evaluations: List[dict] = []
 
         # Evaluate each report
-        for plan, report in zip(plans, reports):
+        for idx, (plan, report) in enumerate(zip(plans, reports)):
             with open(plan, "r") as f:
                 plan_content = f.read()
             with open(report, "r") as f:
@@ -467,6 +474,15 @@ class SemanticSearchAPI:
                     "[evaluate_and_synthesize] Warning: Empty response from LLM during "
                     "evaluation; skipping report."
                 )
+                report_evaluations.append({
+                    "report_index": idx,
+                    "report_filename": report.name,
+                    "plan_filename": plan.name,
+                    "status": "error",
+                    "reason": "Empty response from LLM",
+                    "is_relevant": False,
+                    "is_thorough": False,
+                })
                 continue
 
             cleaned_content = _strip_fences(content)
@@ -477,6 +493,15 @@ class SemanticSearchAPI:
                     "[evaluate_and_synthesize] Warning: Could not decode evaluation "
                     f"response as JSON: {exc}. Raw content: {cleaned_content!r}"
                 )
+                report_evaluations.append({
+                    "report_index": idx,
+                    "report_filename": report.name,
+                    "plan_filename": plan.name,
+                    "status": "error",
+                    "reason": f"JSON decode error: {str(exc)}",
+                    "is_relevant": False,
+                    "is_thorough": False,
+                })
                 continue
 
             try:
@@ -486,17 +511,44 @@ class SemanticSearchAPI:
                     "[evaluate_and_synthesize] Warning: Evaluation response failed "
                     f"validation: {exc}. Raw content: {cleaned_content!r}"
                 )
+                report_evaluations.append({
+                    "report_index": idx,
+                    "report_filename": report.name,
+                    "plan_filename": plan.name,
+                    "status": "error",
+                    "reason": f"Validation error: {str(exc)}",
+                    "is_relevant": False,
+                    "is_thorough": False,
+                })
                 continue
 
-            if report_evaluation.is_relevant and report_evaluation.is_thorough:
+            # Track evaluation result
+            passed = report_evaluation.is_relevant and report_evaluation.is_thorough
+            report_evaluations.append({
+                "report_index": idx,
+                "report_filename": report.name,
+                "plan_filename": plan.name,
+                "status": "used" if passed else "discarded",
+                "reason": report_evaluation.reasoning if hasattr(report_evaluation, 'reasoning') else "",
+                "is_relevant": report_evaluation.is_relevant,
+                "is_thorough": report_evaluation.is_thorough,
+            })
+
+            if passed:
                 passed_reports.append(report_content)
 
+        fallback_used = False
         if not passed_reports:
             print(
                 "[evaluate_and_synthesize] Warning: No reports passed evaluation; "
                 "falling back to using all available reports for synthesis."
             )
             passed_reports = sanitized_reports
+            fallback_used = True
+            # Update all discarded reports to show they were actually used due to fallback
+            for eval_item in report_evaluations:
+                if eval_item["status"] == "discarded":
+                    eval_item["status"] = "used_fallback"
 
         # Synthesize final report
         user_input = f"""<USER REQUEST>
@@ -531,7 +583,17 @@ class SemanticSearchAPI:
         with open(output_file_path, "w") as f:
             f.write(final_report)
 
-        return final_report
+        # Prepare evaluation metadata
+        evaluation_metadata = {
+            "total_reports": len(report_evaluations),
+            "reports_used": sum(1 for e in report_evaluations if e["status"] in ["used", "used_fallback"]),
+            "reports_discarded": sum(1 for e in report_evaluations if e["status"] == "discarded"),
+            "reports_error": sum(1 for e in report_evaluations if e["status"] == "error"),
+            "fallback_used": fallback_used,
+            "report_evaluations": report_evaluations,
+        }
+
+        return final_report, evaluation_metadata
 
     def full_research_pipeline(
         self,

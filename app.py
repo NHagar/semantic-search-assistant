@@ -563,10 +563,12 @@ def synthesize_final_report():
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        final_report = api.evaluate_and_synthesize(data["user_query"])
-        return jsonify(
-            {"message": "Final report generated successfully", "content": final_report}
-        )
+        final_report, evaluation_metadata = api.evaluate_and_synthesize(data["user_query"])
+        return jsonify({
+            "message": "Final report generated successfully",
+            "content": final_report,
+            "evaluation": evaluation_metadata
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

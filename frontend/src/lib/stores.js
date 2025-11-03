@@ -32,6 +32,7 @@ export const reportsGenerated = writable(false);
 // Final report state
 export const finalReport = writable('');
 export const finalReportGenerated = writable(false);
+export const reportEvaluations = writable(null);
 
 // Navigation
 export const steps = [

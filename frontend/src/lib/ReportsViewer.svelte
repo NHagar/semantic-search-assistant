@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { reports, setError, setLoading, selectedLLM, corpusName } from './stores.js';
+  import { reports, reportEvaluations, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -13,13 +13,17 @@
   let regeneratingReport = null;
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
+  let evaluationData = null;
 
-  // Subscribe to store changes  
+  // Subscribe to store changes
   reports.subscribe(value => {
     reportsList = value;
     if (reportsList.length > 0 && !selectedReport) {
       selectedReport = reportsList[0];
     }
+  });
+  reportEvaluations.subscribe(value => {
+    evaluationData = value;
   });
   selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
   corpusName.subscribe(value => { corpus = value || ''; });
@@ -198,6 +202,23 @@
       return result;
     }
   }
+
+  function getReportEvaluation(reportFilename) {
+    if (!evaluationData || !evaluationData.report_evaluations) {
+      return null;
+    }
+    return evaluationData.report_evaluations.find(e => e.report_filename === reportFilename);
+  }
+
+  function getStatusBadge(status) {
+    const badges = {
+      'used': { label: 'Used', class: 'status-used' },
+      'discarded': { label: 'Discarded', class: 'status-discarded' },
+      'used_fallback': { label: 'Used (Fallback)', class: 'status-fallback' },
+      'error': { label: 'Error', class: 'status-error' }
+    };
+    return badges[status] || null;
+  }
 </script>
 
 <div class="reports-viewer">
@@ -220,12 +241,19 @@
         <h4>Reports</h4>
         <div class="reports-list">
           {#each reportsList as report, index}
-            <div 
+            {@const evaluation = getReportEvaluation(report.filename)}
+            {@const badge = evaluation ? getStatusBadge(evaluation.status) : null}
+            <div
               class="report-item"
               class:selected={selectedReport && selectedReport.id === report.id}
               on:click={() => selectReport(report)}
             >
-              <div class="report-title">Report {index + 1}</div>
+              <div class="report-header-row">
+                <div class="report-title">Report {index + 1}</div>
+                {#if badge}
+                  <span class="status-badge {badge.class}">{badge.label}</span>
+                {/if}
+              </div>
               <div class="report-filename">{report.filename}</div>
             </div>
           {/each}
@@ -242,8 +270,8 @@
                 <button class="cancel-btn" on:click={cancelEdit}>Cancel</button>
               {:else}
                 <button class="edit-btn" on:click={startEditing}>Edit Report</button>
-                <button 
-                  class="regenerate-btn" 
+                <button
+                  class="regenerate-btn"
                   on:click={regenerateReport}
                   disabled={regeneratingReport === selectedReport.id}
                 >
@@ -252,6 +280,38 @@
               {/if}
             </div>
           </div>
+
+          {@const evaluation = getReportEvaluation(selectedReport.filename)}
+          {#if evaluation}
+            <div class="evaluation-info">
+              <div class="evaluation-header">
+                <strong>Evaluation Results</strong>
+                {@const badge = getStatusBadge(evaluation.status)}
+                {#if badge}
+                  <span class="status-badge {badge.class}">{badge.label}</span>
+                {/if}
+              </div>
+              <div class="evaluation-details">
+                <div class="eval-item">
+                  <span class="eval-label">Relevant:</span>
+                  <span class="eval-value {evaluation.is_relevant ? 'positive' : 'negative'}">
+                    {evaluation.is_relevant ? 'Yes' : 'No'}
+                  </span>
+                </div>
+                <div class="eval-item">
+                  <span class="eval-label">Thorough:</span>
+                  <span class="eval-value {evaluation.is_thorough ? 'positive' : 'negative'}">
+                    {evaluation.is_thorough ? 'Yes' : 'No'}
+                  </span>
+                </div>
+              </div>
+              {#if evaluation.reason}
+                <div class="evaluation-reason">
+                  <strong>Reason:</strong> {evaluation.reason}
+                </div>
+              {/if}
+            </div>
+          {/if}
 
           <div class="report-tabs">
             <div class="tabs-header">
@@ -425,17 +485,53 @@
     border-color: #1976d2;
   }
 
+  .report-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    gap: 8px;
+  }
+
   .report-title {
     font-weight: 500;
     color: #333;
     font-size: 14px;
-    margin-bottom: 4px;
   }
 
   .report-filename {
     font-family: 'Courier New', monospace;
     font-size: 11px;
     color: #666;
+  }
+
+  .status-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .status-used {
+    background: #4caf50;
+    color: white;
+  }
+
+  .status-discarded {
+    background: #ff9800;
+    color: white;
+  }
+
+  .status-fallback {
+    background: #ffc107;
+    color: #333;
+  }
+
+  .status-error {
+    background: #f44336;
+    color: white;
   }
 
   .report-content {
@@ -706,5 +802,71 @@
 
   .synthesize-btn:hover {
     background: #45a049;
+  }
+
+  .evaluation-info {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 16px 20px;
+  }
+
+  .evaluation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: #333;
+  }
+
+  .evaluation-details {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .eval-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 4px;
+  }
+
+  .eval-label {
+    font-size: 12px;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .eval-value {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .eval-value.positive {
+    color: #4caf50;
+  }
+
+  .eval-value.negative {
+    color: #f44336;
+  }
+
+  .evaluation-reason {
+    padding: 8px 12px;
+    background: white;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .evaluation-reason strong {
+    color: #333;
+    display: inline-block;
+    margin-right: 4px;
   }
 </style>

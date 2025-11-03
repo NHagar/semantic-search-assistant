@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { finalReport, finalReportGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
+  import { finalReport, finalReportGenerated, reportEvaluations, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -11,6 +11,7 @@
   let editing = false;
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
+  let evaluationData = null;
   
   // Default synthesis query for comprehensive analysis
   const DEFAULT_SYNTHESIS_QUERY = "Provide a comprehensive analysis and synthesis of all research findings from the document corpus";
@@ -18,6 +19,9 @@
   // Subscribe to store changes
   finalReport.subscribe(value => {
     report = value;
+  });
+  reportEvaluations.subscribe(value => {
+    evaluationData = value;
   });
   selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
   corpusName.subscribe(value => { corpus = value || ''; });
@@ -43,12 +47,19 @@
   async function generateFinalReport() {
     generating = true;
     setLoading(true);
-    
+
     try {
       const result = await apiService.synthesizeFinalReport(DEFAULT_SYNTHESIS_QUERY, llm, corpus);
       report = result.content;
       finalReport.set(result.content);
       finalReportGenerated.set(true);
+
+      // Store evaluation data if available
+      if (result.evaluation) {
+        evaluationData = result.evaluation;
+        reportEvaluations.set(result.evaluation);
+      }
+
       dispatch('generated', result);
       setError(null);
     } catch (err) {
@@ -186,6 +197,42 @@
       </button>
     </div>
   {:else}
+    {#if evaluationData}
+      <div class="synthesis-summary">
+        <h4>Report Synthesis Summary</h4>
+        <div class="synthesis-stats">
+          <div class="stat-item">
+            <span class="stat-label">Total Reports:</span>
+            <span class="stat-value">{evaluationData.total_reports}</span>
+          </div>
+          <div class="stat-item used">
+            <span class="stat-label">Reports Used:</span>
+            <span class="stat-value">{evaluationData.reports_used}</span>
+          </div>
+          <div class="stat-item discarded">
+            <span class="stat-label">Reports Discarded:</span>
+            <span class="stat-value">{evaluationData.reports_discarded}</span>
+          </div>
+          {#if evaluationData.reports_error > 0}
+            <div class="stat-item error">
+              <span class="stat-label">Evaluation Errors:</span>
+              <span class="stat-value">{evaluationData.reports_error}</span>
+            </div>
+          {/if}
+        </div>
+        {#if evaluationData.fallback_used}
+          <div class="fallback-notice">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+              <line x1="12" y1="9" x2="12" y2="13"></line>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            <span>No reports passed evaluation criteria. All reports were used as fallback.</span>
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     <div class="report-section">
       <div class="report-actions">
         {#if editing}
@@ -529,5 +576,79 @@
     margin: 0;
     color: #388e3c;
     font-size: 14px;
+  }
+
+  .synthesis-summary {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+
+  .synthesis-summary h4 {
+    margin: 0 0 16px 0;
+    color: #333;
+    font-size: 16px;
+  }
+
+  .synthesis-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 3px solid #6c757d;
+  }
+
+  .stat-item.used {
+    background: #e8f5e9;
+    border-left-color: #4caf50;
+  }
+
+  .stat-item.discarded {
+    background: #fff3e0;
+    border-left-color: #ff9800;
+  }
+
+  .stat-item.error {
+    background: #ffebee;
+    border-left-color: #f44336;
+  }
+
+  .stat-label {
+    font-size: 13px;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .stat-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .fallback-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 6px;
+    color: #856404;
+    font-size: 13px;
+  }
+
+  .fallback-notice svg {
+    flex-shrink: 0;
   }
 </style>
