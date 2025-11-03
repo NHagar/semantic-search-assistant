@@ -598,6 +598,18 @@ class SemanticSearchAPI:
         """
         return self.vector_db.semantic_search(query, n_results=n_results)
 
+    def get_citation_source(self, citation_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the source material for a specific citation key.
+
+        Args:
+            citation_key: Citation key in format "hash:chunk_id" (e.g., "7aa4eb:1")
+
+        Returns:
+            Dictionary with citation source information or None if not found
+        """
+        return self.vector_db.get_citation_source(citation_key)
+
     def get_all_embedded_documents(self) -> List[Dict[str, Any]]:
         """Get all documents from the vector database with their reconstructed text."""
         return self.vector_db.get_all_documents()

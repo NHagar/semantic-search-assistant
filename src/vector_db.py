@@ -397,6 +397,78 @@ class VectorDB:
             f"Database updated successfully! Processed {len(documents_to_process)} new documents."
         )
 
+    def get_citation_source(self, citation_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Get the source material for a specific citation key.
+
+        Args:
+            citation_key: Citation key in format "hash:chunk_id" (e.g., "7aa4eb:1")
+
+        Returns:
+            Dictionary with citation source information or None if not found
+        """
+        if not citation_key:
+            return None
+
+        try:
+            # Query the collection for the specific citation key
+            results = self.collection.get(
+                where={"citation_key": citation_key},
+                include=["metadatas", "documents"]
+            )
+
+            if not results or not results["documents"] or len(results["documents"]) == 0:
+                return None
+
+            # Get the first (and should be only) result
+            metadata = results["metadatas"][0]
+            content = results["documents"][0]
+
+            # Also try to get surrounding chunks for context
+            filename = metadata["filename"]
+            chunk_id = metadata["chunk_id"]
+
+            # Get adjacent chunks (if available)
+            prev_chunk = None
+            next_chunk = None
+
+            # Try to get previous chunk
+            if chunk_id > 0:
+                prev_results = self.collection.get(
+                    where={
+                        "filename": filename,
+                        "chunk_id": chunk_id - 1
+                    },
+                    include=["documents"]
+                )
+                if prev_results and prev_results["documents"]:
+                    prev_chunk = prev_results["documents"][0]
+
+            # Try to get next chunk
+            next_results = self.collection.get(
+                where={
+                    "filename": filename,
+                    "chunk_id": chunk_id + 1
+                },
+                include=["documents"]
+            )
+            if next_results and next_results["documents"]:
+                next_chunk = next_results["documents"][0]
+
+            return {
+                "citation_key": citation_key,
+                "filename": filename,
+                "chunk_id": chunk_id,
+                "content": content,
+                "prev_chunk": prev_chunk,
+                "next_chunk": next_chunk,
+                "path": metadata.get("path", ""),
+            }
+
+        except Exception as e:
+            print(f"Error retrieving citation {citation_key}: {e}")
+            return None
+
     def semantic_search(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """Perform semantic search using chroma."""
         query = f"search_query: {query}"
