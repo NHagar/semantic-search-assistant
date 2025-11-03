@@ -1,11 +1,11 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { reports, reportsGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
+  import { reports, reportsGenerated, setError, setLoading, selectedLLM, corpusName, selectedPlanIds } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
-  
+
   let executing = false;
   let executionLogs = [];
   let chunkSize = 1024;
@@ -14,6 +14,7 @@
   let generatedReports = [];
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
+  let planIds = [];
 
   // Subscribe to store changes
   reports.subscribe(value => {
@@ -21,6 +22,7 @@
   });
   selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
   corpusName.subscribe(value => { corpus = value || ''; });
+  selectedPlanIds.subscribe(value => { planIds = Array.from(value); });
 
   onMount(async () => {
     // Wait a bit for stores to initialize
@@ -48,16 +50,18 @@
     setLoading(true);
 
     // Add initial log entry
-    addLog('info', 'Starting search plan execution...');
-    
+    const planCount = planIds.length > 0 ? planIds.length : 'all';
+    addLog('info', `Starting execution of ${planCount} search plan${planIds.length !== 1 ? 's' : ''}...`);
+
     try {
-      const result = await apiService.executeSearchPlans({}, llm, corpus);
-      
+      const options = planIds.length > 0 ? { plan_ids: planIds } : {};
+      const result = await apiService.executeSearchPlans(options, llm, corpus);
+
       addLog('success', `Execution completed! Generated ${result.reports.length} reports`);
-      
+
       // Load the detailed reports
       await loadExistingReports();
-      
+
       executionComplete = true;
       dispatch('completed', result);
       setError(null);
@@ -76,16 +80,18 @@
     setLoading(true);
 
     // Add initial log entry
-    addLog('info', 'Re-executing search plans...');
-    
+    const planCount = planIds.length > 0 ? planIds.length : 'all';
+    addLog('info', `Re-executing ${planCount} search plan${planIds.length !== 1 ? 's' : ''}...`);
+
     try {
-      const result = await apiService.executeSearchPlans({}, llm, corpus);
-      
+      const options = planIds.length > 0 ? { plan_ids: planIds } : {};
+      const result = await apiService.executeSearchPlans(options, llm, corpus);
+
       addLog('success', `Re-execution completed! Generated ${result.reports.length} reports`);
-      
+
       // Load the detailed reports
       await loadExistingReports();
-      
+
       dispatch('completed', result);
       setError(null);
     } catch (err) {
