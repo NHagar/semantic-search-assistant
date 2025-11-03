@@ -60,7 +60,7 @@
 </script>
 
 <div class="text-with-citations">
-  {#each segments as segment}
+  {#each segments as segment, index (segment.type === 'citation' ? `${segment.content}-${index}` : `text-${index}`)}
     {#if segment.type === 'text'}
       {segment.content}
     {:else if segment.type === 'citation'}
