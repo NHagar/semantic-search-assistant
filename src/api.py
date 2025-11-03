@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
-from werkzeug.utils import secure_filename
+from src.project_manager import sanitize_filename
 
 from .extract_and_sample_pdfs import (
     extract_pdfs_to_txt,
@@ -621,7 +621,7 @@ class SemanticSearchAPI:
         if not filename:
             return False
 
-        sanitized_filename = secure_filename(filename)
+        sanitized_filename = sanitize_filename(filename)
         if not sanitized_filename:
             return False
 

@@ -148,7 +148,9 @@ def upload_files():
             continue
 
         if file and file.filename and file.filename.lower().endswith(".pdf"):
-            filename = secure_filename(file.filename)
+            # Use the unified sanitization function
+            from src.project_manager import sanitize_filename
+            filename = sanitize_filename(file.filename)
             filepath = upload_dir / filename
 
             # Check if file already exists
