@@ -267,11 +267,9 @@
   }
 
   function handleExecutePlans(event) {
-    const selectedPlanIds = event?.detail?.selectedPlanIds || [];
+    const planIds = event?.detail?.selectedPlanIds || [];
     // Store selected plan IDs for use in SearchExecution
-    if (selectedPlanIds.length > 0) {
-      selectedPlanIds.set(new Set(selectedPlanIds));
-    }
+    selectedPlanIds.set(new Set(planIds));
     completeStep(2);
     markDownstreamNeedsUpdate(3);
     currentStep.set(3);
