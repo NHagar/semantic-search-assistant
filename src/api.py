@@ -627,7 +627,7 @@ class SemanticSearchAPI:
         self.execute_search_plans()
 
         print("Step 5: Evaluating and synthesizing results...")
-        final_report = self.evaluate_and_synthesize(synthesis_query)
+        final_report, _ = self.evaluate_and_synthesize(synthesis_query)
 
         print("Research pipeline complete!")
         return final_report
