@@ -109,6 +109,7 @@ def get_existing_combinations():
                     "model_name": model_name,
                     "display_name": f"{corpus_name} ({model_name})",
                     "stages": info["stages"],
+                    "has_vector_db": info["has_vector_db"],
                     "file_count": doc_count,
                     "last_modified": info["last_modified"]
                 })

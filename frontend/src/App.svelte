@@ -87,6 +87,70 @@
     currentStep.set(0);
   }
 
+  function initializeWorkflowStateFromProject(projectData) {
+    // Map backend stages to frontend step statuses
+    const { stages, has_vector_db } = projectData;
+    const newStatuses = [...steps.map(() => STEP_STATUS.NOT_STARTED)];
+
+    // Step 0: Upload Documents - completed if vector DB exists
+    if (has_vector_db) {
+      newStatuses[0] = STEP_STATUS.COMPLETED;
+    } else {
+      newStatuses[0] = STEP_STATUS.IN_PROGRESS;
+    }
+
+    // Step 1: Document Description - completed if description exists
+    if (stages?.description) {
+      newStatuses[1] = STEP_STATUS.COMPLETED;
+    }
+
+    // Step 2: Search Plans - completed if plans exist
+    if (stages?.plans) {
+      newStatuses[2] = STEP_STATUS.COMPLETED;
+    }
+
+    // Step 3: Execute Search - completed if reports exist
+    if (stages?.reports) {
+      newStatuses[3] = STEP_STATUS.COMPLETED;
+
+      // Step 4: Review Reports - only mark as completed if final report also exists
+      // This gives users a chance to review reports before synthesizing
+      if (stages?.final) {
+        newStatuses[4] = STEP_STATUS.COMPLETED;
+      }
+    }
+
+    // Step 5: Final Report - completed if final report exists
+    if (stages?.final) {
+      newStatuses[5] = STEP_STATUS.COMPLETED;
+    }
+
+    stepStatuses.set(newStatuses);
+
+    // Determine which step to start on based on progress
+    let initialStep = 0;
+
+    // Find the first incomplete step
+    for (let i = 0; i < newStatuses.length; i++) {
+      if (newStatuses[i] !== STEP_STATUS.COMPLETED) {
+        initialStep = i;
+        break;
+      }
+    }
+
+    // If all steps are completed, go to the last step
+    if (newStatuses.every(status => status === STEP_STATUS.COMPLETED)) {
+      initialStep = steps.length - 1;
+    }
+
+    currentStep.set(initialStep);
+
+    // Mark the initial step as in-progress if it's not completed
+    if (newStatuses[initialStep] !== STEP_STATUS.COMPLETED) {
+      startStep(initialStep);
+    }
+  }
+
   function resetWorkflowState() {
     stepStatuses.set(steps.map(() => STEP_STATUS.NOT_STARTED));
     currentStep.set(0);
@@ -263,9 +327,14 @@
     currentProject.set(projectData);
     projectSelected.set(true);
 
-    // Always start at step 0 (document upload)
-    // Users can navigate freely using the progress steps
-    initializeWorkflowState();
+    // Initialize workflow state based on actual project progress
+    // For new projects, this will start at step 0
+    // For existing projects, this will resume from the appropriate step
+    if (projectData.isNew) {
+      initializeWorkflowState();
+    } else {
+      initializeWorkflowStateFromProject(projectData);
+    }
   }
 
   function backToProjectSelection() {
