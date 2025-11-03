@@ -3,6 +3,7 @@
   import { apiService } from './api.js';
   import { reports, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
+  import TextWithCitations from './TextWithCitations.svelte';
 
   const dispatch = createEventDispatcher();
   
@@ -271,7 +272,11 @@
                   ></textarea>
                 {:else}
                   <div class="report-display">
-                    <pre>{getReportMainContent(selectedReport.content)}</pre>
+                    <TextWithCitations
+                      text={getReportMainContent(selectedReport.content)}
+                      llm={llm}
+                      corpusName={corpus}
+                    />
                   </div>
                 {/if}
               </div>

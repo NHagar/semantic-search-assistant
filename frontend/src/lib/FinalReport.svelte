@@ -3,6 +3,7 @@
   import { apiService } from './api.js';
   import { finalReport, finalReportGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
   import { onMount } from 'svelte';
+  import TextWithCitations from './TextWithCitations.svelte';
 
   const dispatch = createEventDispatcher();
   
@@ -213,23 +214,11 @@
           ></textarea>
         {:else}
           <div class="report-display">
-            {#if report.includes('# ')}
-              <!-- Render as HTML if it contains markdown headers -->
-              <div class="markdown-content">
-                {@html report
-                  .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-                  .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-                  .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-                  .replace(/^#### (.+)$/gm, '<h4>$1</h4>')
-                  .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-                  .replace(/\*(.+?)\*/g, '<em>$1</em>')
-                  .replace(/\n\n/g, '</p><p>')
-                  .replace(/^(.+)$/, '<p>$1</p>')
-                }
-              </div>
-            {:else}
-              <pre class="report-text">{report}</pre>
-            {/if}
+            <TextWithCitations
+              text={report}
+              llm={llm}
+              corpusName={corpus}
+            />
           </div>
         {/if}
       </div>

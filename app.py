@@ -808,5 +808,28 @@ def delete_project():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/citation-source/<citation_key>", methods=["GET"])
+def get_citation_source(citation_key):
+    """Get the source material for a specific citation key."""
+    llm = request.args.get("llm", "qwen/qwen3-14b")
+    corpus_name = request.args.get("corpus_name", "")
+
+    if not citation_key:
+        return jsonify({"error": "citation_key is required"}), 400
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+        citation_source = api.get_citation_source(citation_key)
+
+        if citation_source:
+            return jsonify(citation_source)
+        else:
+            return jsonify({"error": f"Citation not found: {citation_key}"}), 404
+    except Exception as e:
+        print(f"[get-citation-source] ERROR: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5001)
