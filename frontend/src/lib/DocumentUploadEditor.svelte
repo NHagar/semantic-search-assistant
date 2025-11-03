@@ -156,7 +156,8 @@
     }
 
     // Replace all non-alphanumeric characters (except underscores) with underscores
-    let sanitized = baseName.replace(/[^a-zA-Z0-9_]/g, '_');
+    // Use Unicode-aware character classes to match Python's str.isalnum()
+    let sanitized = baseName.replace(/[^\p{L}\p{N}_]/gu, '_');
 
     // Collapse multiple consecutive underscores into one
     sanitized = sanitized.replace(/_+/g, '_');
