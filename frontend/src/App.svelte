@@ -10,6 +10,7 @@
     currentProject,
     stepStatuses,
     STEP_STATUS,
+    selectedPlanIds,
   } from "./lib/stores.js";
   import { apiService } from "./lib/api.js";
 
@@ -265,7 +266,10 @@
     markDownstreamNeedsUpdate(3);
   }
 
-  function handleExecutePlans() {
+  function handleExecutePlans(event) {
+    const planIds = event?.detail?.selectedPlanIds || [];
+    // Store selected plan IDs for use in SearchExecution
+    selectedPlanIds.set(new Set(planIds));
     completeStep(2);
     markDownstreamNeedsUpdate(3);
     currentStep.set(3);

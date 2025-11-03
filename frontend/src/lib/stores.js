@@ -24,6 +24,7 @@ export const documentDescription = writable('');
 // Search plans state
 export const searchPlans = writable([]);
 export const searchPlansGenerated = writable(false);
+export const selectedPlanIds = writable(new Set());
 
 // Reports state
 export const reports = writable([]);

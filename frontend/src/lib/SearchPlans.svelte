@@ -1,24 +1,31 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiService } from './api.js';
-  import { searchPlans, searchPlansGenerated, setError, setLoading, selectedLLM, corpusName } from './stores.js';
+  import { searchPlans, searchPlansGenerated, setError, setLoading, selectedLLM, corpusName, selectedPlanIds } from './stores.js';
   import { onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
-  
+
   let plans = [];
   let generating = false;
   let editingPlan = null;
   let editContent = '';
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
-  
+  let selectedIds = new Set();
+
   // Subscribe to store changes
   searchPlans.subscribe(value => {
     plans = value;
+    // Auto-select all plans when they're first loaded if none are selected
+    if (plans.length > 0 && selectedIds.size === 0) {
+      selectedIds = new Set(plans.map(p => p.id));
+      selectedPlanIds.set(selectedIds);
+    }
   });
   selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
   corpusName.subscribe(value => { corpus = value || ''; });
+  selectedPlanIds.subscribe(value => { selectedIds = value; });
 
   onMount(async () => {
     // Wait a bit for stores to initialize
@@ -110,6 +117,36 @@
     searchPlansGenerated.set(false);
     await generateSearchPlans();
   }
+
+  function togglePlanSelection(planId) {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(planId)) {
+      newSelected.delete(planId);
+    } else {
+      newSelected.add(planId);
+    }
+    selectedIds = newSelected;
+    selectedPlanIds.set(newSelected);
+  }
+
+  function selectAll() {
+    const allIds = new Set(plans.map(p => p.id));
+    selectedIds = allIds;
+    selectedPlanIds.set(allIds);
+  }
+
+  function selectNone() {
+    selectedIds = new Set();
+    selectedPlanIds.set(new Set());
+  }
+
+  function executeSelectedPlans() {
+    if (selectedIds.size === 0) {
+      setError('Please select at least one plan to execute');
+      return;
+    }
+    dispatch('execute', { selectedPlanIds: Array.from(selectedIds) });
+  }
 </script>
 
 <div class="search-plans">
@@ -152,11 +189,31 @@
       </button>
     </div>
   {:else}
+    <div class="selection-controls">
+      <div class="selection-info">
+        <span class="selection-count">{selectedIds.size} of {plans.length} plan{plans.length !== 1 ? 's' : ''} selected</span>
+      </div>
+      <div class="selection-actions">
+        <button class="select-btn" on:click={selectAll}>Select All</button>
+        <button class="select-btn" on:click={selectNone}>Select None</button>
+      </div>
+    </div>
+
     <div class="plans-list">
       {#each plans as plan, index}
-        <div class="plan-item">
+        <div class="plan-item" class:selected={selectedIds.has(plan.id)}>
           <div class="plan-header">
-            <h5>Search Plan {index + 1}</h5>
+            <div class="plan-title-section">
+              <label class="checkbox-container">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(plan.id)}
+                  on:change={() => togglePlanSelection(plan.id)}
+                />
+                <span class="checkmark"></span>
+              </label>
+              <h5>Search Plan {index + 1}</h5>
+            </div>
             <div class="plan-actions">
               {#if editingPlan === plan.id}
                 <button class="save-btn" on:click={() => savePlan(plan)}>Save</button>
@@ -166,7 +223,7 @@
               {/if}
             </div>
           </div>
-          
+
           <div class="plan-content">
             {#if editingPlan === plan.id}
               <textarea
@@ -183,8 +240,8 @@
     </div>
 
     <div class="next-step">
-      <button class="execute-btn" on:click={() => dispatch('execute')}>
-        Execute Search Plans
+      <button class="execute-btn" on:click={executeSelectedPlans} disabled={selectedIds.size === 0}>
+        Execute {selectedIds.size > 0 ? `${selectedIds.size} ` : ''}Selected Plan{selectedIds.size !== 1 ? 's' : ''}
       </button>
     </div>
   {/if}
@@ -279,6 +336,50 @@
     cursor: not-allowed;
   }
 
+  .selection-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+
+  .selection-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .selection-count {
+    font-size: 14px;
+    font-weight: 500;
+    color: #555;
+  }
+
+  .selection-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .select-btn {
+    background: white;
+    color: #4CAF50;
+    border: 1px solid #4CAF50;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+
+  .select-btn:hover {
+    background: #4CAF50;
+    color: white;
+  }
+
   .plans-list {
     display: grid;
     gap: 20px;
@@ -289,6 +390,12 @@
     border: 1px solid #ddd;
     border-radius: 8px;
     overflow: hidden;
+    transition: all 0.2s;
+  }
+
+  .plan-item.selected {
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 1px #4CAF50;
   }
 
   .plan-header {
@@ -298,6 +405,71 @@
     padding: 16px 20px;
     background: #f8f9fa;
     border-bottom: 1px solid #e9ecef;
+  }
+
+  .plan-title-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .checkbox-container {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  .checkbox-container input {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    height: 0;
+    width: 0;
+  }
+
+  .checkmark {
+    display: inline-block;
+    height: 20px;
+    width: 20px;
+    background-color: white;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .checkbox-container:hover input ~ .checkmark {
+    border-color: #4CAF50;
+  }
+
+  .checkbox-container input:checked ~ .checkmark {
+    background-color: #4CAF50;
+    border-color: #4CAF50;
+  }
+
+  .checkmark:after {
+    content: "";
+    position: absolute;
+    display: none;
+  }
+
+  .checkbox-container input:checked ~ .checkmark:after {
+    display: block;
+  }
+
+  .checkbox-container .checkmark:after {
+    left: 6px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    -webkit-transform: rotate(45deg);
+    -ms-transform: rotate(45deg);
+    transform: rotate(45deg);
   }
 
   .plan-header h5 {
@@ -390,9 +562,15 @@
     cursor: pointer;
     font-size: 18px;
     font-weight: 500;
+    transition: all 0.2s;
   }
 
-  .execute-btn:hover {
+  .execute-btn:hover:not(:disabled) {
     background: #7B1FA2;
+  }
+
+  .execute-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
   }
 </style>

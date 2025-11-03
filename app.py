@@ -443,10 +443,11 @@ def execute_search_plans():
     data = request.get_json() or {}
     llm = data.get("llm", "qwen/qwen3-14b")
     corpus_name = data.get("corpus_name", "")
+    plan_ids = data.get("plan_ids", None)  # Optional list of plan IDs to execute
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        reports = api.execute_search_plans()
+        reports = api.execute_search_plans(plan_ids=plan_ids)
         return jsonify(
             {"message": f"Generated {len(reports)} reports", "reports": reports}
         )

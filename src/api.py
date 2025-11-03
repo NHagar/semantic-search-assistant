@@ -330,12 +330,15 @@ class SemanticSearchAPI:
     def execute_search_plans(
         self,
         search_plans: Optional[List[str]] = None,
+        plan_ids: Optional[List[str]] = None,
     ) -> List[str]:
         """
         Execute search plans and generate reports.
 
         Args:
             search_plans: List of search plans. If None, loads from files.
+            plan_ids: Optional list of plan IDs to execute (e.g., ['search_plan_1', 'search_plan_3']).
+                     If None, executes all plans.
 
         Returns:
             List of generated reports
@@ -347,7 +350,20 @@ class SemanticSearchAPI:
         output_dir = self._get_output_dir()
 
         if search_plans is None:
-            plan_files = sorted(output_dir.glob("search_plan_*.txt"))
+            # Load plan files from disk
+            all_plan_files = sorted(output_dir.glob("search_plan_*.txt"))
+
+            # Filter by plan_ids if specified
+            if plan_ids is not None and len(plan_ids) > 0:
+                plan_files = []
+                for plan_id in plan_ids:
+                    plan_file = output_dir / f"{plan_id}.txt"
+                    if plan_file.exists():
+                        plan_files.append(plan_file)
+                    else:
+                        print(f"Warning: Plan file {plan_id}.txt not found, skipping...")
+            else:
+                plan_files = all_plan_files
         else:
             plan_files = []
             for i, plan in enumerate(search_plans, start=1):
