@@ -76,7 +76,11 @@
       const embeddedNames = new Set(embeddedDocs.map(doc => doc.name));
 
       const uploadedDocs = (uploadedResponse.documents || [])
-        .filter(doc => !embeddedNames.has(doc.filename))
+        .filter(doc => {
+          // Check if this PDF has already been embedded (as .txt)
+          const txtVersion = doc.filename.replace(/\.pdf$/i, '.txt');
+          return !embeddedNames.has(doc.filename) && !embeddedNames.has(txtVersion);
+        })
         .map(doc => ({
           file: null,
           name: doc.filename,
@@ -137,15 +141,34 @@
     dragActive = false;
   }
 
-  // Helper function to normalize filename (matches backend's secure_filename behavior)
+  // Helper function to normalize filename (matches backend's sanitize_filename behavior)
   function normalizeFilename(filename) {
-    // Remove extension, normalize, then add back
-    const nameWithoutExt = filename.replace(/\.pdf$/i, '');
-    const normalized = nameWithoutExt
-      .replace(/[^\w\s-]/g, '') // Remove special chars except word chars, spaces, hyphens
-      .replace(/[-\s]+/g, '_')   // Replace spaces and hyphens with underscores
-      .replace(/^_+|_+$/g, '');  // Trim underscores from start/end
-    return normalized + '.pdf';
+    if (!filename) return '';
+
+    // Separate extension
+    const parts = filename.split('.');
+    let extension = '';
+    let baseName = filename;
+
+    if (parts.length >= 2 && (parts[parts.length - 1].toLowerCase() === 'pdf' || parts[parts.length - 1].toLowerCase() === 'txt')) {
+      extension = parts.pop().toLowerCase();
+      baseName = parts.join('.');
+    }
+
+    // Replace all non-alphanumeric characters (except underscores) with underscores
+    let sanitized = baseName.replace(/[^a-zA-Z0-9_]/g, '_');
+
+    // Collapse multiple consecutive underscores into one
+    sanitized = sanitized.replace(/_+/g, '_');
+
+    // Remove leading/trailing underscores
+    sanitized = sanitized.replace(/^_+|_+$/g, '');
+
+    // Add back extension if present
+    if (extension) {
+      return `${sanitized}.${extension}`;
+    }
+    return sanitized;
   }
 
   async function addFiles(newFiles) {

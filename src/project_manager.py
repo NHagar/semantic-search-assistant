@@ -15,6 +15,54 @@ def sanitize_name(name: str) -> str:
     return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in name)
 
 
+def sanitize_filename(filename: str) -> str:
+    """
+    Convert a filename to a safe, consistent format.
+
+    This function ensures consistent sanitization across frontend and backend:
+    - Separates extension from base name
+    - Replaces all non-alphanumeric characters (except underscores) with underscores
+    - Collapses multiple consecutive underscores into one
+    - Removes leading/trailing underscores from base name
+    - Preserves the file extension
+
+    Examples:
+        "10.1177_0734242X211052846.pdf" -> "10_1177_0734242X211052846.pdf"
+        "The explosion in AI-related research.pdf" -> "The_explosion_in_AI_related_research.pdf"
+
+    Args:
+        filename: The original filename
+
+    Returns:
+        Sanitized filename with consistent formatting
+    """
+    if not filename:
+        return ""
+
+    # Separate extension
+    parts = filename.rsplit(".", 1)
+    if len(parts) == 2 and parts[1].lower() in ("pdf", "txt"):
+        base_name, extension = parts
+    else:
+        base_name = filename
+        extension = ""
+
+    # Replace all non-alphanumeric characters (except underscores) with underscores
+    sanitized = "".join(c if c.isalnum() or c == "_" else "_" for c in base_name)
+
+    # Collapse multiple consecutive underscores into one
+    import re
+    sanitized = re.sub(r"_+", "_", sanitized)
+
+    # Remove leading/trailing underscores
+    sanitized = sanitized.strip("_")
+
+    # Add back extension if present
+    if extension:
+        return f"{sanitized}.{extension.lower()}"
+    return sanitized
+
+
 class ProjectManager:
     """
     Manages the directory structure for a specific project (corpus + model combination).
