@@ -425,35 +425,45 @@ class VectorDB:
             content = results["documents"][0]
 
             # Also try to get surrounding chunks for context
-            filename = metadata["filename"]
-            chunk_id = metadata["chunk_id"]
+            filename = metadata.get("filename", "")
+            chunk_id_raw = metadata.get("chunk_id")
+
+            # Ensure chunk_id is an integer
+            if chunk_id_raw is None:
+                chunk_id = 0
+            else:
+                try:
+                    chunk_id = int(chunk_id_raw)
+                except (ValueError, TypeError):
+                    chunk_id = 0
 
             # Get adjacent chunks (if available)
             prev_chunk = None
             next_chunk = None
 
-            # Try to get previous chunk
-            if chunk_id > 0:
-                prev_results = self.collection.get(
-                    where={
-                        "filename": filename,
-                        "chunk_id": chunk_id - 1
-                    },
-                    include=["documents"]
+            # Try to get all chunks from the same file
+            try:
+                file_results = self.collection.get(
+                    where={"filename": filename},  # type: ignore
+                    include=["metadatas", "documents"]
                 )
-                if prev_results and prev_results["documents"]:
-                    prev_chunk = prev_results["documents"][0]
 
-            # Try to get next chunk
-            next_results = self.collection.get(
-                where={
-                    "filename": filename,
-                    "chunk_id": chunk_id + 1
-                },
-                include=["documents"]
-            )
-            if next_results and next_results["documents"]:
-                next_chunk = next_results["documents"][0]
+                if file_results and file_results["metadatas"]:
+                    # Find adjacent chunks by filtering
+                    for i, meta in enumerate(file_results["metadatas"]):
+                        try:
+                            chunk_id_value = meta.get("chunk_id", -1)
+                            if chunk_id_value == -1:
+                                continue
+                            meta_chunk_id = int(chunk_id_value)  # type: ignore
+                            if meta_chunk_id == chunk_id - 1 and file_results["documents"]:
+                                prev_chunk = file_results["documents"][i]
+                            elif meta_chunk_id == chunk_id + 1 and file_results["documents"]:
+                                next_chunk = file_results["documents"][i]
+                        except (ValueError, TypeError):
+                            continue
+            except Exception as e:
+                print(f"Error getting adjacent chunks: {e}")
 
             return {
                 "citation_key": citation_key,

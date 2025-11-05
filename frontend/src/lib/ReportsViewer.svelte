@@ -284,10 +284,10 @@
 
           {@const evaluation = getReportEvaluation(selectedReport.filename)}
           {#if evaluation}
+            {@const badge = getStatusBadge(evaluation.status)}
             <div class="evaluation-info">
               <div class="evaluation-header">
                 <strong>Evaluation Results</strong>
-                {@const badge = getStatusBadge(evaluation.status)}
                 {#if badge}
                   <span class="status-badge {badge.class}">{badge.label}</span>
                 {/if}

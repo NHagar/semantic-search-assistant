@@ -570,7 +570,17 @@ def synthesize_final_report():
             "content": final_report,
             "evaluation": evaluation_metadata
         })
+    except FileNotFoundError as e:
+        print(f"[synthesize-final-report] File not found: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": f"File not found: {str(e)}"}), 500
+    except ValueError as e:
+        print(f"[synthesize-final-report] Validation error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
+        print(f"[synthesize-final-report] ERROR: {str(e)}")
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

@@ -426,21 +426,46 @@ class SemanticSearchAPI:
 
         # Load plans and reports
         plans = sorted(output_dir.glob("search_plan_*.txt"), key=lambda p: p.name)
-        reports = sorted(
+        all_reports = sorted(
             output_dir.glob("report_search_plan_*.txt"), key=lambda p: p.name
         )
 
-        if len(plans) != len(reports):
-            raise ValueError(
-                f"Number of plans ({len(plans)}) and reports ({len(reports)}) do not match."
-            )
+        # Create a mapping of plan files to their corresponding report files
+        # Extract plan number from filename (e.g., "search_plan_1.txt" -> 1)
+        plan_to_report = {}
+        for report in all_reports:
+            # Extract plan number from report filename
+            # Format: "report_search_plan_X.txt"
+            report_name = report.name
+            if report_name.startswith("report_search_plan_"):
+                plan_num = report_name.replace("report_search_plan_", "").replace(".txt", "")
+                plan_file = f"search_plan_{plan_num}.txt"
+                plan_to_report[plan_file] = report
+
+        if not all_reports:
+            raise ValueError("No reports found. Please execute search plans first.")
 
         passed_reports: List[str] = []
         sanitized_reports: List[str] = []
         report_evaluations: List[dict] = []
 
-        # Evaluate each report
-        for idx, (plan, report) in enumerate(zip(plans, reports)):
+        # Evaluate each plan-report pair
+        for idx, plan in enumerate(plans):
+            # Check if this plan has a corresponding report
+            if plan.name not in plan_to_report:
+                print(f"[evaluate_and_synthesize] Warning: No report found for {plan.name}, skipping.")
+                report_evaluations.append({
+                    "report_index": idx,
+                    "report_filename": None,
+                    "plan_filename": plan.name,
+                    "status": "error",
+                    "reason": "No report generated for this plan",
+                    "is_relevant": False,
+                    "is_thorough": False,
+                })
+                continue
+
+            report = plan_to_report[plan.name]
             with open(plan, "r") as f:
                 plan_content = f.read()
             with open(report, "r") as f:
