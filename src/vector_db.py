@@ -43,10 +43,8 @@ class VectorDB:
         db_path.mkdir(parents=True, exist_ok=True)
 
         self.chroma_client = chromadb.PersistentClient(path=str(db_path))
-        self.embedder = SentenceTransformer(
-            "nomic-ai/nomic-embed-text-v1.5", trust_remote_code=True
-        )
-        self.embedding_dim = 512
+        self.embedder = SentenceTransformer("BAAI/bge-small-en-v1.5")
+        self.embedding_dim = 384
         self.tokenizer = self.embedder.tokenizer
 
         print("Initializing collection...")
@@ -180,7 +178,11 @@ class VectorDB:
                             )
                     document_chunks.sort(key=lambda x: x["chunk_id"])
 
-                return {"filename": filename, "text": full_text, "chunks": document_chunks}
+                return {
+                    "filename": filename,
+                    "text": full_text,
+                    "chunks": document_chunks,
+                }
             else:
                 # File doesn't exist - this shouldn't happen in normal operation
                 print(f"Warning: txt file not found for {filename}")
@@ -413,11 +415,14 @@ class VectorDB:
         try:
             # Query the collection for the specific citation key
             results = self.collection.get(
-                where={"citation_key": citation_key},
-                include=["metadatas", "documents"]
+                where={"citation_key": citation_key}, include=["metadatas", "documents"]
             )
 
-            if not results or not results["documents"] or len(results["documents"]) == 0:
+            if (
+                not results
+                or not results["documents"]
+                or len(results["documents"]) == 0
+            ):
                 return None
 
             # Get the first (and should be only) result
@@ -445,7 +450,7 @@ class VectorDB:
             try:
                 file_results = self.collection.get(
                     where={"filename": filename},  # type: ignore
-                    include=["metadatas", "documents"]
+                    include=["metadatas", "documents"],
                 )
 
                 if file_results and file_results["metadatas"]:
@@ -456,9 +461,15 @@ class VectorDB:
                             if chunk_id_value == -1:
                                 continue
                             meta_chunk_id = int(chunk_id_value)  # type: ignore
-                            if meta_chunk_id == chunk_id - 1 and file_results["documents"]:
+                            if (
+                                meta_chunk_id == chunk_id - 1
+                                and file_results["documents"]
+                            ):
                                 prev_chunk = file_results["documents"][i]
-                            elif meta_chunk_id == chunk_id + 1 and file_results["documents"]:
+                            elif (
+                                meta_chunk_id == chunk_id + 1
+                                and file_results["documents"]
+                            ):
                                 next_chunk = file_results["documents"][i]
                         except (ValueError, TypeError):
                             continue
