@@ -485,61 +485,6 @@
     min-height: 400px;
   }
 
-  .markdown-content {
-    line-height: 1.6;
-    color: #333;
-  }
-
-  .markdown-content h1 {
-    font-size: 28px;
-    margin: 0 0 20px 0;
-    color: #2c3e50;
-    border-bottom: 2px solid #3498db;
-    padding-bottom: 10px;
-  }
-
-  .markdown-content h2 {
-    font-size: 22px;
-    margin: 24px 0 16px 0;
-    color: #34495e;
-  }
-
-  .markdown-content h3 {
-    font-size: 18px;
-    margin: 20px 0 12px 0;
-    color: #2c3e50;
-  }
-
-  .markdown-content h4 {
-    font-size: 16px;
-    margin: 16px 0 8px 0;
-    color: #34495e;
-  }
-
-  .markdown-content p {
-    margin: 0 0 16px 0;
-  }
-
-  .markdown-content strong {
-    font-weight: 600;
-    color: #2c3e50;
-  }
-
-  .markdown-content em {
-    font-style: italic;
-    color: #7f8c8d;
-  }
-
-  .report-text {
-    margin: 0;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    color: #333;
-  }
-
   .completion-message {
     display: flex;
     align-items: center;
