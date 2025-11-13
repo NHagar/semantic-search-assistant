@@ -16,6 +16,7 @@
 
   /**
    * Parse a search plan text into structured components
+   * Handles headers with or without colons for flexibility
    */
   function parsePlanContent(content) {
     const parsed = {
@@ -25,14 +26,14 @@
       outputStructure: ''
     };
 
-    // Extract OBJECTIVE
-    const objectiveMatch = content.match(/OBJECTIVE:\s*(.+?)(?=\n\n|\nSPECIFIC SUB-OBJECTIVES:)/s);
+    // Extract OBJECTIVE (colon optional)
+    const objectiveMatch = content.match(/OBJECTIVE:?\s*(.+?)(?=\n\n|\nSPECIFIC SUB-OBJECTIVES)/s);
     if (objectiveMatch) {
       parsed.objective = objectiveMatch[1].trim();
     }
 
-    // Extract SPECIFIC SUB-OBJECTIVES
-    const subObjMatch = content.match(/SPECIFIC SUB-OBJECTIVES:\s*\n((?:\d+\.[\s\S]+?)(?=\n\nSUGGESTED QUERIES:|\nSUGGESTED QUERIES:))/);
+    // Extract SPECIFIC SUB-OBJECTIVES (colon optional)
+    const subObjMatch = content.match(/SPECIFIC SUB-OBJECTIVES:?\s*\n((?:\d+\.[\s\S]+?)(?=\n\nSUGGESTED QUERIES|\nSUGGESTED QUERIES))/);
     if (subObjMatch) {
       const subObjText = subObjMatch[1].trim();
       const subObjLines = subObjText.split(/\n(?=\d+\.)/);
@@ -41,19 +42,31 @@
         .filter(line => line.length > 0);
     }
 
-    // Extract SUGGESTED QUERIES
-    const queriesMatch = content.match(/SUGGESTED QUERIES:\s*\n((?:[-•]\s*"[^"]+"\s*\n?)+)/);
+    // Extract SUGGESTED QUERIES (colon optional, handle various formats)
+    // Try with bullets/dashes first
+    let queriesMatch = content.match(/SUGGESTED QUERIES:?\s*\n((?:[-•]\s*.+\s*\n?)+)/);
     if (queriesMatch) {
       const queriesText = queriesMatch[1];
       parsed.suggestedQueries = queriesText
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0)
-        .map(line => line.replace(/^[-•]\s*"?|"?\s*$/g, ''));
+        .map(line => line.replace(/^[-•]\s*"?|"?\s*$/g, '').trim());
+    } else {
+      // Try without bullets (just lines of text after SUGGESTED QUERIES)
+      queriesMatch = content.match(/SUGGESTED QUERIES:?\s*\n((?:.+\n?)+?)(?=\n\nOUTPUT STRUCTURE|\n\n---|\*\*SEARCH PLAN|$)/);
+      if (queriesMatch) {
+        const queriesText = queriesMatch[1];
+        parsed.suggestedQueries = queriesText
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0 && !line.match(/^OUTPUT STRUCTURE/))
+          .map(line => line.replace(/^[-•]\s*"?|"?\s*$/g, '').trim());
+      }
     }
 
-    // Extract OUTPUT STRUCTURE (if present)
-    const outputMatch = content.match(/OUTPUT STRUCTURE:\s*\n([\s\S]+?)(?=\n\n---|\n\*\*SEARCH PLAN|$)/);
+    // Extract OUTPUT STRUCTURE (if present, colon optional)
+    const outputMatch = content.match(/OUTPUT STRUCTURE:?\s*\n([\s\S]+?)(?=\n\n---|\n\*\*SEARCH PLAN|$)/);
     if (outputMatch) {
       parsed.outputStructure = outputMatch[1].trim();
     }
