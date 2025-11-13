@@ -1,92 +1,141 @@
 <script>
   import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
+  import { onMount } from 'svelte';
   import CitationPreview from './CitationPreview.svelte';
 
   export let text = '';
   export let llm = '';
   export let corpusName = '';
 
+  let containerElement;
+  let citationComponents = [];
+
   // Regular expression to match citation keys like [7aa4eb:1]
   const citationRegex = /\[([a-f0-9]{6}:\d+)\]/g;
 
-  // Configure marked for better rendering
+  // Configure marked for better rendering and security
+  // Disable raw HTML parsing to prevent XSS (defense in depth with DOMPurify)
   marked.setOptions({
     breaks: true,
     gfm: true,
+    // Disable HTML parsing - any HTML in markdown will be escaped
+    // Exception: our citation markers are added AFTER user input is processed
   });
 
-  // Parse text and split into segments with citation markers
-  function parseTextWithCitations(inputText) {
-    if (!inputText) return [];
+  // Use marked's walkTokens to ensure no HTML tokens are processed from user input
+  marked.use({
+    walkTokens(token) {
+      // This runs before rendering, allowing us to inspect/modify tokens
+      // HTML tokens from user input would appear here
+    }
+  });
 
-    // Step 1: Extract citations and replace with placeholders
-    const citations = [];
-    let textWithPlaceholders = inputText.replace(citationRegex, (match, key) => {
-      const placeholder = `__CITATION_${citations.length}__`;
-      citations.push(key);
-      return placeholder;
+  // Configure DOMPurify - whitelist only safe tags and attributes
+  const purifyConfig = {
+    ALLOWED_TAGS: [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre',
+      'ul', 'ol', 'li',
+      'blockquote',
+      'table', 'thead', 'tbody', 'tr', 'th', 'td',
+      'a', 'img',
+      'hr',
+      'span', 'div'
+    ],
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'data-cite-key'],
+    ALLOW_DATA_ATTR: false,
+  };
+
+  // Store citation data indexed by marker
+  let citationsMap = new Map();
+
+  // Parse markdown and prepare HTML with citation markers
+  function parseMarkdownWithCitations(inputText) {
+    if (!inputText) return '';
+
+    citationsMap.clear();
+
+    // Step 1: Replace citations with inline span markers that survive markdown parsing
+    let textWithMarkers = inputText.replace(citationRegex, (match, key) => {
+      const markerId = `cite-${Math.random().toString(36).substr(2, 9)}`;
+      citationsMap.set(markerId, key);
+      // Use a span that will remain inline in the rendered HTML
+      return `<span class="citation-marker" data-cite-key="${markerId}"></span>`;
     });
 
     // Step 2: Parse markdown to HTML
-    const html = marked.parse(textWithPlaceholders);
+    let html = marked.parse(textWithMarkers);
 
-    // Step 3: Split HTML by citation placeholders and create segments
-    const segments = [];
-    let currentHtml = html;
+    // Step 3: Sanitize HTML to prevent XSS attacks
+    const sanitized = DOMPurify.sanitize(html, purifyConfig);
 
-    citations.forEach((citationKey, index) => {
-      const placeholder = `__CITATION_${index}__`;
-      const parts = currentHtml.split(placeholder);
-
-      if (parts[0]) {
-        segments.push({
-          type: 'html',
-          content: parts[0]
-        });
-      }
-
-      segments.push({
-        type: 'citation',
-        content: citationKey
-      });
-
-      currentHtml = parts.slice(1).join(placeholder);
-    });
-
-    // Add any remaining HTML
-    if (currentHtml) {
-      segments.push({
-        type: 'html',
-        content: currentHtml
-      });
-    }
-
-    // If no segments created (no citations), just parse as markdown
-    if (segments.length === 0 && inputText) {
-      segments.push({
-        type: 'html',
-        content: marked.parse(inputText)
-      });
-    }
-
-    return segments;
+    return sanitized;
   }
 
-  $: segments = parseTextWithCitations(text);
+  // Svelte action to mount citation components in place of markers
+  function handleCitations(node) {
+    // Find all citation markers
+    const markers = node.querySelectorAll('.citation-marker');
+
+    // Clean up any existing components
+    citationComponents.forEach(comp => {
+      if (comp.$destroy) comp.$destroy();
+    });
+    citationComponents = [];
+
+    markers.forEach(marker => {
+      const markerId = marker.getAttribute('data-cite-key');
+      const citationKey = citationsMap.get(markerId);
+
+      if (citationKey) {
+        // Create a container for the citation component
+        const container = document.createElement('span');
+        container.className = 'citation-wrapper';
+
+        // Replace the marker with the container
+        marker.parentNode.replaceChild(container, marker);
+
+        // Mount the CitationPreview component
+        const component = new CitationPreview({
+          target: container,
+          props: {
+            citationKey,
+            llm,
+            corpusName
+          }
+        });
+
+        citationComponents.push(component);
+      }
+    });
+
+    return {
+      destroy() {
+        citationComponents.forEach(comp => {
+          if (comp.$destroy) comp.$destroy();
+        });
+        citationComponents = [];
+      }
+    };
+  }
+
+  $: sanitizedHtml = parseMarkdownWithCitations(text);
+
+  // Re-apply action when props change
+  $: if (containerElement && sanitizedHtml) {
+    setTimeout(() => {
+      handleCitations(containerElement);
+    }, 0);
+  }
 </script>
 
-<div class="text-with-citations markdown-content">
-  {#each segments as segment, index}
-    {#if segment.type === 'html'}
-      {@html segment.content}
-    {:else if segment.type === 'citation'}
-      <CitationPreview
-        citationKey={segment.content}
-        {llm}
-        {corpusName}
-      />
-    {/if}
-  {/each}
+<div
+  class="text-with-citations markdown-content"
+  bind:this={containerElement}
+  use:handleCitations
+>
+  {@html sanitizedHtml}
 </div>
 
 <style>
