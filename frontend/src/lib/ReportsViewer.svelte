@@ -386,12 +386,6 @@
         {/if}
       </div>
     </div>
-
-    <div class="next-step">
-      <button class="synthesize-btn" on:click={() => dispatch('synthesize')}>
-        Generate Final Report
-      </button>
-    </div>
   {/if}
 </div>
 
@@ -787,26 +781,6 @@
     word-wrap: break-word;
     max-height: 400px;
     overflow-y: auto;
-  }
-
-  .next-step {
-    margin-top: 30px;
-    text-align: center;
-  }
-
-  .synthesize-btn {
-    background: #4caf50;
-    color: white;
-    border: none;
-    padding: 16px 32px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 18px;
-    font-weight: 500;
-  }
-
-  .synthesize-btn:hover {
-    background: #45a049;
   }
 
   .evaluation-info {
