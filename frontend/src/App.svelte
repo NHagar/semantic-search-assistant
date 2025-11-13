@@ -21,7 +21,6 @@
   import SearchPlans from "./lib/SearchPlans.svelte";
   import SearchExecution from "./lib/SearchExecution.svelte";
   import ReportsViewer from "./lib/ReportsViewer.svelte";
-  import FinalReport from "./lib/FinalReport.svelte";
 
   let currentStepValue = 0;
   let isLoading = false;
@@ -113,17 +112,7 @@
     // Step 3: Execute Search - completed if reports exist
     if (stages?.reports) {
       newStatuses[3] = STEP_STATUS.COMPLETED;
-
-      // Step 4: Review Reports - only mark as completed if final report also exists
-      // This gives users a chance to review reports before synthesizing
-      if (stages?.final) {
-        newStatuses[4] = STEP_STATUS.COMPLETED;
-      }
-    }
-
-    // Step 5: Final Report - completed if final report exists
-    if (stages?.final) {
-      newStatuses[5] = STEP_STATUS.COMPLETED;
+      newStatuses[4] = STEP_STATUS.COMPLETED;
     }
 
     stepStatuses.set(newStatuses);
@@ -293,33 +282,12 @@
     console.log("Report saved:", event.detail);
     // Stay on the same step
     completeStep(4);
-    markDownstreamNeedsUpdate(5);
   }
 
   function handleReportRegenerated(event) {
     console.log("Report regenerated:", event.detail);
     // Stay on the same step
     startStep(4);
-    markDownstreamNeedsUpdate(5);
-  }
-
-  function handleSynthesizeReport() {
-    completeStep(4);
-    markDownstreamNeedsUpdate(5);
-    currentStep.set(5);
-    startStep(5);
-  }
-
-  function handleFinalReportGenerated(event) {
-    console.log("Final report generated:", event.detail);
-    // Stay on the same step
-    startStep(5);
-  }
-
-  function handleFinalReportSaved(event) {
-    console.log("Final report saved:", event.detail);
-    // Stay on the same step
-    completeStep(5);
   }
 
   function dismissError() {
@@ -576,30 +544,11 @@
         <div class="step-panel">
           <h2>Review Reports</h2>
           <p>
-            View and edit the generated search reports before creating the final
-            synthesis.
+            View and edit the generated search reports.
           </p>
           <ReportsViewer
             on:saved={handleReportSaved}
             on:regenerated={handleReportRegenerated}
-            on:synthesize={handleSynthesizeReport}
-          />
-          <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}
-              >Previous</button
-            >
-          </div>
-        </div>
-      {:else if currentStepValue === 5}
-        <div class="step-panel">
-          <h2>Final Report</h2>
-          <p>
-            Generate and optionally edit your comprehensive final research
-            report.
-          </p>
-          <FinalReport
-            on:generated={handleFinalReportGenerated}
-            on:saved={handleFinalReportSaved}
           />
           <div class="navigation-buttons">
             <button class="nav-btn secondary" on:click={prevStep}

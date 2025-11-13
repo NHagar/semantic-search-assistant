@@ -10,8 +10,7 @@ export const isResuming = writable(false);
 export const resumeStages = writable({
   description: false,
   plans: false,
-  reports: false,
-  final: false
+  reports: false
 });
 export const projectSelected = writable(false);
 export const currentProject = writable(null);
@@ -29,10 +28,6 @@ export const selectedPlanIds = writable(new Set());
 // Reports state
 export const reports = writable([]);
 export const reportsGenerated = writable(false);
-
-// Final report state
-export const finalReport = writable('');
-export const finalReportGenerated = writable(false);
 export const reportEvaluations = writable(null);
 
 // Navigation
@@ -41,8 +36,7 @@ export const steps = [
   { id: 1, title: 'Document Description', description: 'Generate and edit document corpus description' },
   { id: 2, title: 'Search Plans', description: 'Generate comprehensive search plans for corpus analysis' },
   { id: 3, title: 'Execute Search', description: 'Run search agents and view tool calls' },
-  { id: 4, title: 'Review Reports', description: 'View and edit generated reports' },
-  { id: 5, title: 'Final Report', description: 'Generate and edit final synthesized report' }
+  { id: 4, title: 'Review Reports', description: 'View and edit generated reports' }
 ];
 
 export const STEP_STATUS = {
