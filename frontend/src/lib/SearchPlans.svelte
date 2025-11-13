@@ -14,6 +14,66 @@
   let corpus = '';
   let selectedIds = new Set();
 
+  /**
+   * Parse a search plan text into structured components
+   * Handles headers with or without colons for flexibility
+   */
+  function parsePlanContent(content) {
+    const parsed = {
+      objective: '',
+      subObjectives: [],
+      suggestedQueries: [],
+      outputStructure: ''
+    };
+
+    // Extract OBJECTIVE (colon optional)
+    const objectiveMatch = content.match(/OBJECTIVE:?\s*(.+?)(?=\n\n|\nSPECIFIC SUB-OBJECTIVES)/s);
+    if (objectiveMatch) {
+      parsed.objective = objectiveMatch[1].trim();
+    }
+
+    // Extract SPECIFIC SUB-OBJECTIVES (colon optional)
+    const subObjMatch = content.match(/SPECIFIC SUB-OBJECTIVES:?\s*\n((?:\d+\.[\s\S]+?)(?=\n\nSUGGESTED QUERIES|\nSUGGESTED QUERIES))/);
+    if (subObjMatch) {
+      const subObjText = subObjMatch[1].trim();
+      const subObjLines = subObjText.split(/\n(?=\d+\.)/);
+      parsed.subObjectives = subObjLines
+        .map(line => line.replace(/^\d+\.\s*/, '').trim())
+        .filter(line => line.length > 0);
+    }
+
+    // Extract SUGGESTED QUERIES (colon optional, handle various formats)
+    // Try with bullets/dashes first
+    let queriesMatch = content.match(/SUGGESTED QUERIES:?\s*\n((?:[-•]\s*.+\s*\n?)+)/);
+    if (queriesMatch) {
+      const queriesText = queriesMatch[1];
+      parsed.suggestedQueries = queriesText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => line.replace(/^[-•]\s*"?|"?\s*$/g, '').trim());
+    } else {
+      // Try without bullets (just lines of text after SUGGESTED QUERIES)
+      queriesMatch = content.match(/SUGGESTED QUERIES:?\s*\n((?:.+\n?)+?)(?=\n\nOUTPUT STRUCTURE|\n\n---|\*\*SEARCH PLAN|$)/);
+      if (queriesMatch) {
+        const queriesText = queriesMatch[1];
+        parsed.suggestedQueries = queriesText
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0 && !line.match(/^OUTPUT STRUCTURE/))
+          .map(line => line.replace(/^[-•]\s*"?|"?\s*$/g, '').trim());
+      }
+    }
+
+    // Extract OUTPUT STRUCTURE (if present, colon optional)
+    const outputMatch = content.match(/OUTPUT STRUCTURE:?\s*\n([\s\S]+?)(?=\n\n---|\n\*\*SEARCH PLAN|$)/);
+    if (outputMatch) {
+      parsed.outputStructure = outputMatch[1].trim();
+    }
+
+    return parsed;
+  }
+
   // Subscribe to store changes
   searchPlans.subscribe(value => {
     plans = value;
@@ -232,7 +292,64 @@
                 class="plan-editor"
               ></textarea>
             {:else}
-              <pre class="plan-display">{plan.content}</pre>
+              {@const parsedPlan = parsePlanContent(plan.content)}
+              <div class="plan-card">
+                {#if parsedPlan.objective}
+                  <div class="plan-section objective-section">
+                    <div class="section-header">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="3"/>
+                      </svg>
+                      <h6>Objective</h6>
+                    </div>
+                    <p class="objective-text">{parsedPlan.objective}</p>
+                  </div>
+                {/if}
+
+                {#if parsedPlan.subObjectives.length > 0}
+                  <div class="plan-section sub-objectives-section">
+                    <div class="section-header">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+                        <path d="M9 12l2 2 4-4"/>
+                      </svg>
+                      <h6>Specific Sub-Objectives</h6>
+                    </div>
+                    <ul class="sub-objectives-list">
+                      {#each parsedPlan.subObjectives as subObj, idx}
+                        <li>
+                          <span class="objective-number">{idx + 1}.</span>
+                          <span class="objective-text">{subObj}</span>
+                        </li>
+                      {/each}
+                    </ul>
+                  </div>
+                {/if}
+
+                {#if parsedPlan.suggestedQueries.length > 0}
+                  <div class="plan-section queries-section">
+                    <div class="section-header">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="m21 21-4.35-4.35"/>
+                      </svg>
+                      <h6>Suggested Queries</h6>
+                      <span class="query-count">{parsedPlan.suggestedQueries.length} queries</span>
+                    </div>
+                    <div class="queries-grid">
+                      {#each parsedPlan.suggestedQueries as query}
+                        <div class="query-tag">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M7 7h10M7 12h10M7 17h10"/>
+                          </svg>
+                          {query}
+                        </div>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -535,17 +652,124 @@
     resize: vertical;
   }
 
-  .plan-display {
-    margin: 0;
-    font-family: 'Courier New', monospace;
-    font-size: 13px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-wrap: break-word;
+  .plan-card {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .plan-section {
     background: #f8f9fa;
+    border-radius: 8px;
     padding: 16px;
-    border-radius: 4px;
-    border: 1px solid #e9ecef;
+    border-left: 4px solid;
+  }
+
+  .objective-section {
+    border-left-color: #2196F3;
+  }
+
+  .sub-objectives-section {
+    border-left-color: #4CAF50;
+  }
+
+  .queries-section {
+    border-left-color: #FF9800;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .section-header svg {
+    color: #666;
+    flex-shrink: 0;
+  }
+
+  .section-header h6 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .query-count {
+    margin-left: auto;
+    font-size: 12px;
+    color: #666;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 500;
+  }
+
+  .objective-text {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.6;
+    color: #444;
+  }
+
+  .sub-objectives-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sub-objectives-list li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .objective-number {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: #4CAF50;
+    font-size: 14px;
+  }
+
+  .sub-objectives-list .objective-text {
+    flex: 1;
+    font-size: 14px;
+  }
+
+  .queries-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+
+  .query-tag {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #555;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .query-tag svg {
+    flex-shrink: 0;
+    color: #FF9800;
+  }
+
+  .query-tag:hover {
+    border-color: #FF9800;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
   }
 
   .next-step {
