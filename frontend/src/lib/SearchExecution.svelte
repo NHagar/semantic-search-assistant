@@ -3,6 +3,7 @@
   import { apiService } from './api.js';
   import { reports, reportsGenerated, setError, setLoading, selectedLLM, corpusName, selectedPlanIds } from './stores.js';
   import { onMount } from 'svelte';
+  import MarkdownRenderer from './MarkdownRenderer.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -243,7 +244,11 @@
               <div class="report-summary">
                 <h6>Report Summary</h6>
                 <div class="summary-content">
-                  <pre>{parts[0].trim()}</pre>
+                  <MarkdownRenderer
+                    text={parts[0].trim()}
+                    llm={llm}
+                    corpusName={corpus}
+                  />
                 </div>
               </div>
 
@@ -251,24 +256,25 @@
                 <div class="tool-calls">
                   <h6>Tool Calls ({toolCalls.length})</h6>
                   {#each toolCalls as toolCall, i}
-                    <div class="tool-call">
-                      <div class="tool-call-header">
-                        <strong>{toolCall.id}</strong>
+                    <details class="tool-call">
+                      <summary class="tool-call-header">
+                        <span class="tool-call-id">{toolCall.id}</span>
                         <span class="function-name">{toolCall.function}</span>
-                      </div>
-                      
+                        <span class="expand-icon">▶</span>
+                      </summary>
+
                       <div class="tool-call-details">
                         <div class="arguments">
-                          <strong>Arguments:</strong>
-                          <pre>{toolCall.arguments}</pre>
+                          <div class="detail-label">Arguments</div>
+                          <pre class="code-block">{toolCall.arguments}</pre>
                         </div>
-                        
+
                         <div class="result">
-                          <strong>Result:</strong>
-                          <pre>{formatResult(toolCall.result)}</pre>
+                          <div class="detail-label">Result</div>
+                          <pre class="code-block">{formatResult(toolCall.result)}</pre>
                         </div>
                       </div>
-                    </div>
+                    </details>
                   {/each}
                 </div>
               {/if}
@@ -532,10 +538,10 @@
   }
 
   .summary-content {
-    background: #f8f9fa;
+    background: white;
     border: 1px solid #e9ecef;
-    border-radius: 4px;
-    padding: 16px;
+    border-radius: 6px;
+    padding: 20px;
     margin-bottom: 20px;
   }
 
@@ -554,60 +560,128 @@
   }
 
   .tool-call {
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
-    border-radius: 6px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
     margin-bottom: 12px;
     overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .tool-call:hover {
+    border-color: #1976d2;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .tool-call[open] {
+    border-color: #1976d2;
   }
 
   .tool-call-header {
-    background: #e9ecef;
-    padding: 8px 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 12px 16px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    gap: 12px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    position: relative;
+  }
+
+  .tool-call-header::-webkit-details-marker {
+    display: none;
+  }
+
+  .tool-call-header:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6b3fa0 100%);
+  }
+
+  .tool-call-id {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
 
   .function-name {
-    color: #007bff;
-    font-family: 'Courier New', monospace;
+    color: white;
+    font-family: 'Courier New', Consolas, Monaco, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .expand-icon {
+    color: white;
+    font-size: 10px;
+    transition: transform 0.2s ease;
+    margin-left: auto;
+  }
+
+  .tool-call[open] .expand-icon {
+    transform: rotate(90deg);
   }
 
   .tool-call-details {
-    padding: 12px;
+    padding: 16px;
+    background: #fafafa;
   }
 
   .arguments,
   .result {
-    margin-bottom: 12px;
+    margin-bottom: 16px;
   }
 
-  .arguments strong,
-  .result strong {
+  .arguments:last-child,
+  .result:last-child {
+    margin-bottom: 0;
+  }
+
+  .detail-label {
     display: block;
-    margin-bottom: 4px;
-    font-size: 12px;
+    margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 600;
     color: #666;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
 
-  .arguments pre,
-  .result pre {
+  .code-block {
     margin: 0;
-    font-family: 'Courier New', monospace;
-    font-size: 11px;
-    line-height: 1.3;
+    font-family: 'Courier New', Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.5;
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 3px;
-    padding: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 12px;
     white-space: pre-wrap;
     word-wrap: break-word;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
+    color: #333;
+  }
+
+  .code-block::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .code-block::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  .code-block::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+
+  .code-block::-webkit-scrollbar-thumb:hover {
+    background: #555;
   }
 
   .report-full pre {
