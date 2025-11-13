@@ -1,6 +1,7 @@
 <script>
   import { marked } from 'marked';
   import { onMount, tick } from 'svelte';
+  import DOMPurify from 'dompurify';
   import CitationPreview from './CitationPreview.svelte';
 
   export let text = '';
@@ -17,6 +18,16 @@
     headerIds: true,
     mangle: false
   });
+
+  // Configure DOMPurify to allow our citation placeholder attributes
+  const purifyConfig = {
+    ADD_ATTR: ['data-citation-index', 'data-citation-key'],
+    ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'code', 'pre', 'a', 'ul', 'ol', 'li',
+                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'hr', 'table', 'thead',
+                    'tbody', 'tr', 'th', 'td', 'span', 'div', 'img'],
+    ALLOWED_ATTR: ['href', 'title', 'alt', 'src', 'class', 'data-citation-index', 'data-citation-key'],
+    ALLOW_DATA_ATTR: false // Only allow specific data attributes we've whitelisted
+  };
 
   // Regular expression to match citation keys like [7aa4eb:1]
   const citationRegex = /\[([a-f0-9]{6}:\d+)\]/g;
@@ -36,7 +47,10 @@
     });
 
     // Convert markdown to HTML
-    const html = marked.parse(processedText);
+    let html = marked.parse(processedText);
+
+    // Sanitize HTML to prevent XSS attacks
+    html = DOMPurify.sanitize(html, purifyConfig);
 
     return { html, citations };
   }
