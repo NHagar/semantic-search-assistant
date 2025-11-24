@@ -129,22 +129,26 @@
       return;
     }
 
+    // Get new documents to upload
+    const newDocs = documents.filter(doc => !doc.isExisting && doc.file);
+
+    // If there are no new documents, just continue to next step
+    if (newDocs.length === 0) {
+      dispatch('extracted', { documents });
+      return;
+    }
+
     processing = true;
     setLoading(true);
     progress = 5;
     progressText = 'Uploading documents...';
 
     try {
-      // Get new documents to upload
-      const newDocs = documents.filter(doc => !doc.isExisting && doc.file);
+      progress = 20;
+      progressText = `Uploading ${newDocs.length} document${newDocs.length !== 1 ? 's' : ''}...`;
 
-      if (newDocs.length > 0) {
-        progress = 20;
-        progressText = `Uploading ${newDocs.length} document${newDocs.length !== 1 ? 's' : ''}...`;
-
-        const files = newDocs.map(doc => doc.file);
-        await apiService.uploadFiles(files, llm, corpus);
-      }
+      const files = newDocs.map(doc => doc.file);
+      await apiService.uploadFiles(files, llm, corpus);
 
       progress = 50;
       progressText = 'Extracting text from PDFs...';
@@ -263,11 +267,13 @@
         <button
           class="btn-primary"
           on:click={confirmAndProcess}
-          disabled={processing || documents.filter(d => !d.isExisting).length === 0}
+          disabled={processing || documents.length === 0}
         >
           {#if processing}
             <div class="spinner"></div>
             Processing...
+          {:else if documents.length > 0 && documents.filter(d => !d.isExisting).length === 0}
+            Continue
           {:else}
             Confirm & Process
           {/if}
