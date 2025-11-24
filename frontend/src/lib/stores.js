@@ -30,23 +30,6 @@ export const reports = writable([]);
 export const reportsGenerated = writable(false);
 export const reportEvaluations = writable(null);
 
-// Navigation
-export const steps = [
-  { id: 0, title: 'Upload Documents', description: 'Upload PDF documents for processing' },
-  { id: 1, title: 'Document Description', description: 'Generate and edit document corpus description' },
-  { id: 2, title: 'Search Plans', description: 'Generate comprehensive search plans for corpus analysis' },
-  { id: 3, title: 'Execute Search', description: 'Run search agents and view tool calls' },
-  { id: 4, title: 'Review Reports', description: 'View and edit generated reports' }
-];
-
-export const STEP_STATUS = {
-  NOT_STARTED: 'not-started',
-  IN_PROGRESS: 'in-progress',
-  COMPLETED: 'completed',
-  NEEDS_UPDATE: 'needs-update'
-};
-
-export const stepStatuses = writable(steps.map(() => STEP_STATUS.NOT_STARTED));
 
 // Helper functions
 export function setError(message) {

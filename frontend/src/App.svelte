@@ -2,14 +2,11 @@
   import { onMount } from "svelte";
   import {
     currentStep,
-    steps,
     loading,
     error,
     setError,
     projectSelected,
     currentProject,
-    stepStatuses,
-    STEP_STATUS,
     selectedPlanIds,
   } from "./lib/stores.js";
   import { apiService } from "./lib/api.js";
@@ -28,14 +25,6 @@
   let apiHealthy = false;
   let hasProjectSelected = false;
   let project = null;
-  let stepStatusValues = [];
-
-  const STATUS_LABELS = {
-    [STEP_STATUS.NOT_STARTED]: "Not started",
-    [STEP_STATUS.IN_PROGRESS]: "In progress",
-    [STEP_STATUS.COMPLETED]: "Completed",
-    [STEP_STATUS.NEEDS_UPDATE]: "Needs rerun",
-  };
 
   // Subscribe to store changes
   currentStep.subscribe((value) => {
@@ -58,10 +47,6 @@
     project = value;
   });
 
-  stepStatuses.subscribe((value) => {
-    stepStatusValues = value;
-  });
-
   onMount(async () => {
     await checkApiHealth();
   });
@@ -78,216 +63,61 @@
     }
   }
 
-  function initializeWorkflowState() {
-    stepStatuses.set(
-      steps.map((_, index) =>
-        index === 0 ? STEP_STATUS.IN_PROGRESS : STEP_STATUS.NOT_STARTED,
-      ),
-    );
-    currentStep.set(0);
-  }
-
-  function initializeWorkflowStateFromProject(projectData) {
-    // Map backend stages to frontend step statuses
-    const { stages, has_vector_db } = projectData;
-    const newStatuses = [...steps.map(() => STEP_STATUS.NOT_STARTED)];
-
-    // Step 0: Upload Documents - completed if vector DB exists
-    if (has_vector_db) {
-      newStatuses[0] = STEP_STATUS.COMPLETED;
-    } else {
-      newStatuses[0] = STEP_STATUS.IN_PROGRESS;
-    }
-
-    // Step 1: Document Description - completed if description exists
-    if (stages?.description) {
-      newStatuses[1] = STEP_STATUS.COMPLETED;
-    }
-
-    // Step 2: Search Plans - completed if plans exist
-    if (stages?.plans) {
-      newStatuses[2] = STEP_STATUS.COMPLETED;
-    }
-
-    // Step 3: Execute Search - completed if reports exist
-    if (stages?.reports) {
-      newStatuses[3] = STEP_STATUS.COMPLETED;
-      newStatuses[4] = STEP_STATUS.COMPLETED;
-    }
-
-    stepStatuses.set(newStatuses);
-
-    // Determine which step to start on based on progress
-    let initialStep = 0;
-
-    // Find the first incomplete step
-    for (let i = 0; i < newStatuses.length; i++) {
-      if (newStatuses[i] !== STEP_STATUS.COMPLETED) {
-        initialStep = i;
-        break;
-      }
-    }
-
-    // If all steps are completed, go to the last step
-    if (newStatuses.every(status => status === STEP_STATUS.COMPLETED)) {
-      initialStep = steps.length - 1;
-    }
-
-    currentStep.set(initialStep);
-
-    // Mark the initial step as in-progress if it's not completed
-    if (newStatuses[initialStep] !== STEP_STATUS.COMPLETED) {
-      startStep(initialStep);
-    }
-  }
-
-  function resetWorkflowState() {
-    stepStatuses.set(steps.map(() => STEP_STATUS.NOT_STARTED));
-    currentStep.set(0);
-  }
-
-  function startStep(stepIndex) {
-    stepStatuses.update((statuses) => {
-      const updated = [...statuses];
-
-      if (stepIndex >= 0 && stepIndex < updated.length) {
-        if (updated[stepIndex] !== STEP_STATUS.COMPLETED) {
-          updated[stepIndex] = STEP_STATUS.IN_PROGRESS;
-        }
-      }
-
-      return updated;
-    });
-  }
-
-  function completeStep(stepIndex) {
-    stepStatuses.update((statuses) => {
-      const updated = [...statuses];
-
-      if (stepIndex >= 0 && stepIndex < updated.length) {
-        updated[stepIndex] = STEP_STATUS.COMPLETED;
-      }
-
-      return updated;
-    });
-  }
-
-  function markDownstreamNeedsUpdate(startIndex) {
-    stepStatuses.update((statuses) => {
-      const updated = [...statuses];
-
-      for (let index = startIndex; index < updated.length; index += 1) {
-        if (updated[index] === STEP_STATUS.COMPLETED) {
-          updated[index] = STEP_STATUS.NEEDS_UPDATE;
-        }
-      }
-
-      return updated;
-    });
-  }
-
-  function getStepStatus(stepIndex) {
-    return stepStatusValues[stepIndex] ?? STEP_STATUS.NOT_STARTED;
-  }
 
   function nextStep() {
-    // Normal linear progression
-    if (currentStepValue < steps.length - 1) {
-      const currentIndex = currentStepValue;
-      const nextIndex = currentIndex + 1;
-
-      completeStep(currentIndex);
-      currentStep.set(nextIndex);
-      startStep(nextIndex);
+    if (currentStepValue < 4) {
+      currentStep.set(currentStepValue + 1);
     }
   }
 
   function prevStep() {
     if (currentStepValue > 0) {
-      const previousIndex = currentStepValue - 1;
-      currentStep.set(previousIndex);
-      startStep(previousIndex);
-    }
-  }
-
-  function goToStep(stepIndex) {
-    if (stepIndex >= 0 && stepIndex < steps.length) {
-      currentStep.set(stepIndex);
-      startStep(stepIndex);
+      currentStep.set(currentStepValue - 1);
     }
   }
 
   function handleDocumentsExtracted(event) {
     console.log("Documents extracted:", event.detail);
-    completeStep(0);
-    markDownstreamNeedsUpdate(1);
-
-    const nextIndex = Math.min(1, steps.length - 1);
-    currentStep.set(nextIndex);
-    startStep(nextIndex);
+    currentStep.set(1);
   }
 
   function handleDescriptionGenerated(event) {
     console.log("Description generated:", event.detail);
-    // Stay on the same step to allow editing
-    startStep(1);
-    markDownstreamNeedsUpdate(2);
   }
 
   function handleDescriptionSaved(event) {
     console.log("Description saved:", event.detail);
-    // Stay on the same step
-    completeStep(1);
-    markDownstreamNeedsUpdate(2);
   }
 
   function handlePlansGenerated(event) {
     console.log("Search plans generated:", event.detail);
-    // Stay on the same step to allow editing
-    startStep(2);
-    markDownstreamNeedsUpdate(3);
   }
 
   function handlePlansSaved(event) {
     console.log("Search plan saved:", event.detail);
-    // Stay on the same step
-    completeStep(2);
-    markDownstreamNeedsUpdate(3);
   }
 
   function handleExecutePlans(event) {
     const planIds = event?.detail?.selectedPlanIds || [];
-    // Store selected plan IDs for use in SearchExecution
     selectedPlanIds.set(new Set(planIds));
-    completeStep(2);
-    markDownstreamNeedsUpdate(3);
     currentStep.set(3);
-    startStep(3);
   }
 
   function handleExecutionCompleted(event) {
     console.log("Execution completed:", event.detail);
-    completeStep(3);
-    markDownstreamNeedsUpdate(4);
     currentStep.set(4);
-    startStep(4);
   }
 
   function handleReviewReports() {
     currentStep.set(4);
-    startStep(4);
   }
 
   function handleReportSaved(event) {
     console.log("Report saved:", event.detail);
-    // Stay on the same step
-    completeStep(4);
   }
 
   function handleReportRegenerated(event) {
     console.log("Report regenerated:", event.detail);
-    // Stay on the same step
-    startStep(4);
   }
 
   function dismissError() {
@@ -295,24 +125,34 @@
   }
 
   function handleProjectSelected(projectData) {
-    // Update stores with project information
     currentProject.set(projectData);
     projectSelected.set(true);
 
-    // Initialize workflow state based on actual project progress
-    // For new projects, this will start at step 0
-    // For existing projects, this will resume from the appropriate step
+    // Determine initial step based on project progress
     if (projectData.isNew) {
-      initializeWorkflowState();
+      currentStep.set(0);
     } else {
-      initializeWorkflowStateFromProject(projectData);
+      const { stages, has_vector_db } = projectData;
+
+      // Determine which step to start on based on progress
+      if (!has_vector_db) {
+        currentStep.set(0);
+      } else if (!stages?.description) {
+        currentStep.set(1);
+      } else if (!stages?.plans) {
+        currentStep.set(2);
+      } else if (!stages?.reports) {
+        currentStep.set(3);
+      } else {
+        currentStep.set(4);
+      }
     }
   }
 
   function backToProjectSelection() {
     projectSelected.set(false);
     currentProject.set(null);
-    resetWorkflowState();
+    currentStep.set(0);
   }
 </script>
 
@@ -415,72 +255,9 @@
     <!-- Project Selection/Creation Screen -->
     <ProjectManager onProjectSelected={handleProjectSelected} />
   {:else}
-    <!-- Project Workflow -->
+    <!-- Project View -->
     <div class="app-content">
-      <div class="workflow-layout">
-        <aside class="workflow-sidebar">
-          <div class="workflow-header">
-            <h2>Project workflow</h2>
-            <p>Track each stage and see when downstream steps need attention.</p>
-          </div>
-          <ul class="workflow-steps">
-            {#each steps as step, index (step.id)}
-              <li
-                class="workflow-step"
-                class:active={index === currentStepValue}
-                class:completed={getStepStatus(index) === STEP_STATUS.COMPLETED}
-                class:in-progress={getStepStatus(index) === STEP_STATUS.IN_PROGRESS}
-                class:needs-update={getStepStatus(index) === STEP_STATUS.NEEDS_UPDATE}
-                class:not-started={getStepStatus(index) === STEP_STATUS.NOT_STARTED}
-              >
-                <button
-                  type="button"
-                  class="workflow-step-btn"
-                  on:click={() => goToStep(index)}
-                >
-                  <div class="step-header">
-                    <span class="step-index">Step {index + 1}</span>
-                    <span class={`status-pill status-${getStepStatus(index)}`}>
-                      {#if getStepStatus(index) === STEP_STATUS.COMPLETED}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="3"
-                        >
-                          <polyline points="20,6 10,16 5,11" />
-                        </svg>
-                      {:else if getStepStatus(index) === STEP_STATUS.IN_PROGRESS}
-                        <span class="status-dot status-dot-active"></span>
-                      {:else if getStepStatus(index) === STEP_STATUS.NEEDS_UPDATE}
-                        <svg
-                          width="14"
-                          height="14"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2.4"
-                        >
-                          <path d="M12 9v4" />
-                          <circle cx="12" cy="17" r="1" />
-                          <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
-                        </svg>
-                      {:else}
-                        <span class="status-dot"></span>
-                      {/if}
-                      {STATUS_LABELS[getStepStatus(index)]}
-                    </span>
-                  </div>
-                  <div class="workflow-step-title">{step.title}</div>
-                  <div class="workflow-step-description">{step.description}</div>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </aside>
-
+      <div class="project-layout">
         <div class="step-content">
       {#if currentStepValue === 0}
         <div class="step-panel">
@@ -731,217 +508,11 @@
     padding: 40px 20px 64px;
   }
 
-  .workflow-layout {
+  .project-layout {
     max-width: 1200px;
     margin: 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
-    gap: 32px;
-    align-items: flex-start;
   }
 
-  .workflow-sidebar {
-    background: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
-    padding: 24px 20px;
-    position: sticky;
-    top: 24px;
-  }
-
-  .workflow-header h2 {
-    margin: 0;
-    font-size: 20px;
-    color: #0f172a;
-    letter-spacing: -0.01em;
-  }
-
-  .workflow-header p {
-    margin: 8px 0 0;
-    font-size: 13px;
-    color: #64748b;
-    line-height: 1.5;
-  }
-
-  .workflow-steps {
-    list-style: none;
-    margin: 28px 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .workflow-step {
-    position: relative;
-    padding-left: 40px;
-    --dot-color: #cbd5f5;
-    --line-color: rgba(148, 163, 184, 0.3);
-  }
-
-  .workflow-step::before {
-    content: "";
-    position: absolute;
-    left: 18px;
-    top: -20px;
-    bottom: -30px;
-    width: 2px;
-    background: var(--line-color);
-  }
-
-  .workflow-step:first-child::before {
-    top: 24px;
-  }
-
-  .workflow-step:last-child::before {
-    display: none;
-  }
-
-  .workflow-step::after {
-    content: "";
-    position: absolute;
-    left: 9px;
-    top: 18px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--dot-color);
-    border: 3px solid #ffffff;
-    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
-  }
-
-  .workflow-step.completed {
-    --dot-color: #22c55e;
-    --line-color: rgba(34, 197, 94, 0.6);
-  }
-
-  .workflow-step.in-progress {
-    --dot-color: #2563eb;
-    --line-color: rgba(37, 99, 235, 0.55);
-  }
-
-  .workflow-step.needs-update {
-    --dot-color: #f97316;
-    --line-color: rgba(249, 115, 22, 0.55);
-  }
-
-  .workflow-step.active:not(.completed):not(.needs-update) {
-    --dot-color: #2563eb;
-    --line-color: rgba(37, 99, 235, 0.55);
-  }
-
-  .workflow-step-btn {
-    width: 100%;
-    background: #ffffff;
-    border-radius: 12px;
-    border: 1px solid rgba(148, 163, 184, 0.28);
-    padding: 16px 18px;
-    text-align: left;
-    transition: background 0.2s ease, box-shadow 0.2s ease,
-      transform 0.2s ease, border-color 0.2s ease;
-    cursor: pointer;
-  }
-
-  .workflow-step-btn:hover {
-    background: #f8fafc;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
-    transform: translateX(2px);
-  }
-
-  .workflow-step.completed .workflow-step-btn {
-    border-color: rgba(34, 197, 94, 0.35);
-    background: #f0fdf4;
-  }
-
-  .workflow-step.needs-update .workflow-step-btn {
-    border-color: rgba(249, 115, 22, 0.35);
-    background: #fff7ed;
-  }
-
-  .workflow-step.active .workflow-step-btn {
-    border-color: rgba(37, 99, 235, 0.4);
-    box-shadow: 0 14px 32px rgba(37, 99, 235, 0.15);
-  }
-
-  .step-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 10px;
-  }
-
-  .step-index {
-    font-size: 12px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: #64748b;
-  }
-
-  .status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    background: rgba(148, 163, 184, 0.18);
-    color: #475569;
-    white-space: nowrap;
-  }
-
-  .status-pill svg {
-    display: block;
-  }
-
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #94a3b8;
-  }
-
-  .status-dot-active {
-    background: #2563eb;
-  }
-
-  .status-pill.status-in-progress {
-    background: rgba(37, 99, 235, 0.18);
-    color: #1d4ed8;
-  }
-
-  .status-pill.status-completed {
-    background: rgba(34, 197, 94, 0.18);
-    color: #15803d;
-  }
-
-  .status-pill.status-needs-update {
-    background: rgba(249, 115, 22, 0.2);
-    color: #c2410c;
-  }
-
-  .status-pill.status-not-started {
-    background: rgba(148, 163, 184, 0.18);
-    color: #475569;
-  }
-
-  .workflow-step-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #0f172a;
-    margin: 0 0 4px;
-  }
-
-  .workflow-step-description {
-    font-size: 13px;
-    color: #64748b;
-    margin: 0;
-    line-height: 1.6;
-  }
 
   .step-content {
     display: flex;
@@ -1005,17 +576,6 @@
     background: #5a6268;
   }
 
-  @media (max-width: 1024px) {
-    .workflow-layout {
-      grid-template-columns: 1fr;
-      gap: 24px;
-    }
-
-    .workflow-sidebar {
-      position: static;
-    }
-  }
-
   @media (max-width: 768px) {
     .header-content {
       text-align: center;
@@ -1025,93 +585,9 @@
       font-size: 24px;
     }
 
-    .workflow-sidebar {
-      padding: 20px 16px;
-    }
-
-    .workflow-step {
-      padding-left: 32px;
-    }
-
-    .workflow-step::before {
-      left: 14px;
-    }
-
-    .workflow-step::after {
-      left: 5px;
-    }
-
-    .workflow-step-btn {
-      padding: 14px 16px;
-    }
-
-    .workflow-step-title {
-      font-size: 16px;
-    }
-
     .step-panel {
       padding: 24px;
     }
   }
 
-  .resume-info {
-    background: #f8f9fa;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    padding: 24px;
-    margin-top: 24px;
-  }
-
-  .resume-info h4 {
-    margin: 0 0 16px 0;
-    color: #495057;
-  }
-
-  .stage-status {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .stage {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 14px;
-  }
-
-  .stage.complete {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
-    color: #155724;
-  }
-
-  .stage.incomplete {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-    color: #721c24;
-  }
-
-  .stage-icon {
-    font-size: 16px;
-  }
-
-  .stage-name {
-    font-weight: 500;
-  }
-
-  .resume-help {
-    margin: 0 0 16px 0;
-    font-size: 14px;
-    color: #6c757d;
-    font-style: italic;
-  }
-
-  .resume-navigation {
-    display: flex;
-    justify-content: flex-end;
-  }
 </style>
