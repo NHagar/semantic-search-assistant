@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import { documentDescription, setError, selectedLLM, corpusName } from './stores.js';
   import { API_BASE_URL } from './api.js';
+  import MarkdownRenderer from './MarkdownRenderer.svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -117,7 +118,7 @@
 
     {#if description}
       <div class="description-display">
-        <pre>{description}</pre>
+        <MarkdownRenderer text={description} llm={llm} corpusName={corpus} />
         {#if generating}
           <span class="cursor">▊</span>
         {/if}
@@ -192,16 +193,7 @@
     max-height: 600px;
     overflow-y: auto;
     position: relative;
-  }
-
-  .description-display pre {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 15px;
-    line-height: 1.7;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    color: #333;
+    text-align: left;
   }
 
   .cursor {
