@@ -340,6 +340,46 @@ def compress_documents():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/compress-documents-stream", methods=["POST", "OPTIONS"])
+def compress_documents_stream():
+    """Generate document corpus description with streaming response."""
+    # Handle preflight request
+    if request.method == "OPTIONS":
+        response = app.make_default_options_response()
+        return response
+
+    data = request.get_json() or {}
+    documents = data.get("documents")
+    llm = data.get("llm", "qwen/qwen3-14b")
+    corpus_name = data.get("corpus_name", "")
+
+    try:
+        api = get_api(llm=llm, corpus_name=corpus_name)
+
+        def generate():
+            try:
+                for chunk in api.compress_documents_stream(documents=documents):
+                    yield f"data: {chunk}\n\n"
+                yield "data: [DONE]\n\n"
+            except Exception as e:
+                log_exception('compress_documents_stream', e)
+                yield f"data: [ERROR] {str(e)}\n\n"
+
+        response = app.response_class(
+            generate(),
+            mimetype='text/event-stream'
+        )
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['X-Accel-Buffering'] = 'no'
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
+    except Exception as e:
+        log_exception('compress_documents_stream', e)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/update-description", methods=["POST"])
 def update_description():
     """Update the document corpus description."""

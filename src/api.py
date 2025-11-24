@@ -240,6 +240,56 @@ class SemanticSearchAPI:
 
         return result
 
+    def compress_documents_stream(
+        self,
+        documents: Optional[str] = None,
+        prompt_file: str = "prompts/compress.md",
+        output_file: Optional[str] = None,
+    ):
+        """
+        Compress documents using LLM with streaming response.
+
+        Args:
+            documents: Text content to compress. If None, processes PDFs first.
+            prompt_file: Path to compression prompt file
+            output_file: Output file to save compressed content
+
+        Yields:
+            Chunks of compressed document content as they arrive
+        """
+        if documents is None:
+            documents = self.sample_documents()
+
+        if output_file is None:
+            output_file_path = self._get_output_dir() / "doc_report.txt"
+        else:
+            output_file_path = self._get_output_dir() / output_file
+
+        with open(prompt_file, "r") as f:
+            prompt = f.read()
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": documents},
+            ],
+            timeout=1_800,
+            stream=True,
+        )
+
+        full_result = []
+        for chunk in response:
+            if chunk.choices[0].delta.content is not None:
+                content = chunk.choices[0].delta.content
+                full_result.append(content)
+                yield content
+
+        # Save the complete result
+        result = "".join(full_result)
+        with open(output_file_path, "w") as f:
+            f.write(result)
+
     def generate_search_plans(
         self,
         doc_report_file: Optional[str] = None,

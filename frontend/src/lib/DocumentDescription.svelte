@@ -1,347 +1,246 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  import { apiService } from './api.js';
-  import { documentDescription, setError, setLoading, selectedLLM, corpusName } from './stores.js';
-  import { onMount } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
+  import { documentDescription, setError, selectedLLM, corpusName } from './stores.js';
+  import { API_BASE_URL } from './api.js';
 
   const dispatch = createEventDispatcher();
-  
+
+  export let autoGenerate = false;
+
   let description = '';
-  let editing = false;
   let generating = false;
   let llm = 'qwen/qwen3-14b';
   let corpus = '';
-  let nTokens = 100;
-  let sampling = false;
-  
-  // Subscribe to store changes
-  documentDescription.subscribe(value => {
-    description = value;
-  });
+
   selectedLLM.subscribe(value => { llm = value || 'qwen/qwen3-14b'; });
   corpusName.subscribe(value => { corpus = value || ''; });
+  documentDescription.subscribe(value => { description = value; });
 
   onMount(async () => {
-    // Wait a bit for stores to initialize
-    setTimeout(async () => {
-      await loadDescription();
-    }, 100);
+    // Load existing description if available
+    await loadDescription();
+
+    // Auto-generate if requested and no description exists
+    if (autoGenerate && !description) {
+      await generateDescription();
+    }
   });
 
   async function loadDescription() {
     try {
-      const result = await apiService.getDescription(llm, corpus);
-      description = result.content;
-      documentDescription.set(result.content);
+      const response = await fetch(`${API_BASE_URL}/get-description?llm=${encodeURIComponent(llm)}&corpus_name=${encodeURIComponent(corpus)}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.content) {
+          description = data.content;
+          documentDescription.set(data.content);
+        }
+      }
     } catch (err) {
-      setError('Failed to load description: ' + err.message);
+      console.error('Failed to load description:', err);
     }
   }
 
   async function generateDescription() {
+    if (generating) return;
+
     generating = true;
-    setLoading(true);
-    
+    description = '';
+    setError(null);
+
     try {
-      // First sample documents with the token budget
-      sampling = true;
-      const sampleResult = await apiService.sampleDocuments({
-        n_tokens: nTokens
-      }, llm, corpus);
-      sampling = false;
-      
-      // Then compress the sampled content
-      const result = await apiService.compressDocuments(sampleResult.content, llm, corpus);
-      description = result.content;
-      documentDescription.set(result.content);
-      dispatch('generated', result);
-      setError(null);
+      const response = await fetch(`${API_BASE_URL}/compress-documents-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          llm,
+          corpus_name: corpus,
+          documents: null
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+
+            if (data === '[DONE]') {
+              // Save the final description
+              documentDescription.set(description);
+              dispatch('generated', { content: description });
+              // Automatically advance to next step
+              setTimeout(() => {
+                dispatch('saved', { content: description });
+              }, 500);
+              continue;
+            }
+
+            if (data.startsWith('[ERROR]')) {
+              throw new Error(data.slice(8));
+            }
+
+            description += data;
+          }
+        }
+      }
     } catch (err) {
       setError('Failed to generate description: ' + err.message);
     } finally {
       generating = false;
-      sampling = false;
-      setLoading(false);
     }
-  }
-
-  async function saveDescription() {
-    try {
-      await apiService.updateDescription(description, llm, corpus);
-      documentDescription.set(description);
-      editing = false;
-      dispatch('saved', { content: description });
-      setError(null);
-    } catch (err) {
-      setError('Failed to save description: ' + err.message);
-    }
-  }
-
-  function cancelEdit() {
-    // Restore original description
-    documentDescription.subscribe(value => {
-      description = value;
-    });
-    editing = false;
-  }
-
-  function startEditing() {
-    editing = true;
   }
 </script>
 
 <div class="document-description">
-  <div class="header">
-    <h3>Document Corpus Description</h3>
-    <div class="actions">
-      {#if !description}
-        <button 
-          class="generate-btn" 
-          on:click={generateDescription}
-          disabled={generating}
-        >
-          {#if sampling}
-            Sampling documents...
-          {:else if generating}
-            Generating description...
-          {:else}
-            Generate Description
-          {/if}
-        </button>
-      {:else if editing}
-        <button class="save-btn" on:click={saveDescription}>Save</button>
-        <button class="cancel-btn" on:click={cancelEdit}>Cancel</button>
-      {:else}
-        <button class="edit-btn" on:click={startEditing}>Edit</button>
-        <button class="regenerate-btn" on:click={generateDescription} disabled={generating}>
-          {#if sampling}
-            Sampling documents...
-          {:else if generating}
-            Regenerating description...
-          {:else}
-            Regenerate
-          {/if}
-        </button>
-      {/if}
-    </div>
-  </div>
+  <div class="description-container">
+    {#if generating}
+      <div class="streaming-indicator">
+        <div class="pulse-dot"></div>
+        <span>Generating corpus synopsis...</span>
+      </div>
+    {/if}
 
-  <div class="settings">
-    <div class="setting-group">
-      <label for="nTokens">Tokens per document:</label>
-      <input 
-        id="nTokens"
-        type="number" 
-        bind:value={nTokens} 
-        min="10" 
-        max="1000"
-        disabled={generating}
-      />
-      <small>Number of tokens to sample from each document when generating description</small>
-    </div>
+    {#if description}
+      <div class="description-display">
+        <pre>{description}</pre>
+        {#if generating}
+          <span class="cursor">▊</span>
+        {/if}
+      </div>
+    {:else if !generating}
+      <div class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+          <polyline points="14,2 14,8 20,8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <line x1="10" y1="9" x2="8" y2="9"/>
+        </svg>
+        <h4>Generating description...</h4>
+        <p>The synopsis will appear here automatically.</p>
+      </div>
+    {/if}
   </div>
-
-  {#if description}
-    <div class="description-content">
-      {#if editing}
-        <textarea
-          bind:value={description}
-          placeholder="Enter document corpus description..."
-          rows="15"
-        ></textarea>
-      {:else}
-        <div class="description-display">
-          <pre>{description}</pre>
-        </div>
-      {/if}
-    </div>
-  {:else}
-    <div class="empty-state">
-      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-        <polyline points="14,2 14,8 20,8"/>
-        <line x1="16" y1="13" x2="8" y2="13"/>
-        <line x1="16" y1="17" x2="8" y2="17"/>
-        <line x1="10" y1="9" x2="8" y2="9"/>
-      </svg>
-      <h4>No Description Generated</h4>
-      <p>Generate a description of your document corpus to help with search planning.</p>
-    </div>
-  {/if}
 </div>
 
 <style>
   .document-description {
-    max-width: 800px;
+    max-width: 900px;
     margin: 0 auto;
   }
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-
-  .header h3 {
-    margin: 0;
-    color: #333;
-  }
-
-  .actions {
-    display: flex;
-    gap: 8px;
-  }
-
-  .actions button {
-    padding: 8px 16px;
-    border-radius: 4px;
-    border: 1px solid;
-    cursor: pointer;
-    font-size: 14px;
-  }
-
-  .generate-btn, .regenerate-btn {
-    background: #4CAF50;
-    color: white;
-    border-color: #4CAF50;
-  }
-
-  .generate-btn:hover:not(:disabled), .regenerate-btn:hover:not(:disabled) {
-    background: #45a049;
-  }
-
-  .edit-btn {
-    background: #2196F3;
-    color: white;
-    border-color: #2196F3;
-  }
-
-  .edit-btn:hover {
-    background: #1976D2;
-  }
-
-  .save-btn {
-    background: #4CAF50;
-    color: white;
-    border-color: #4CAF50;
-  }
-
-  .save-btn:hover {
-    background: #45a049;
-  }
-
-  .cancel-btn {
-    background: #f44336;
-    color: white;
-    border-color: #f44336;
-  }
-
-  .cancel-btn:hover {
-    background: #d32f2f;
-  }
-
-  .actions button:disabled {
-    background: #ccc;
-    border-color: #ccc;
-    cursor: not-allowed;
-  }
-
-  .description-content {
+  .description-container {
     background: white;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    overflow: hidden;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    min-height: 400px;
+    position: relative;
   }
 
-  .description-content textarea {
-    width: 100%;
-    border: none;
-    padding: 20px;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.5;
-    resize: vertical;
-    outline: none;
+  .streaming-indicator {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: #e3f2fd;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #1565c0;
+    font-weight: 500;
+    z-index: 10;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    background: #1565c0;
+    border-radius: 50%;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.5;
+      transform: scale(0.8);
+    }
   }
 
   .description-display {
-    padding: 20px;
-    max-height: 500px;
+    padding: 32px;
+    max-height: 600px;
     overflow-y: auto;
+    position: relative;
   }
 
   .description-display pre {
     margin: 0;
-    font-family: 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
     white-space: pre-wrap;
     word-wrap: break-word;
+    color: #333;
+  }
+
+  .cursor {
+    display: inline-block;
+    animation: blink 1s step-start infinite;
+    color: #2196F3;
+    font-weight: bold;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
   }
 
   .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
     text-align: center;
     padding: 60px 20px;
     color: #666;
   }
 
   .empty-state svg {
-    margin-bottom: 20px;
-    opacity: 0.5;
+    margin-bottom: 24px;
+    opacity: 0.4;
   }
 
   .empty-state h4 {
     margin: 0 0 12px 0;
     color: #333;
+    font-size: 18px;
   }
 
   .empty-state p {
     margin: 0;
     font-size: 14px;
-  }
-
-  .settings {
-    background: #f8f9fa;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 20px;
-  }
-
-  .setting-group {
-    margin-bottom: 16px;
-  }
-
-  .setting-group:last-child {
-    margin-bottom: 0;
-  }
-
-  .setting-group label {
-    display: block;
-    margin-bottom: 6px;
-    font-weight: 500;
-    color: #333;
-    font-size: 14px;
-  }
-
-  .setting-group input {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-  }
-
-  .setting-group input:disabled {
-    background-color: #f5f5f5;
-    cursor: not-allowed;
-  }
-
-  .setting-group small {
-    display: block;
-    margin-top: 4px;
-    color: #666;
-    font-size: 12px;
   }
 </style>
