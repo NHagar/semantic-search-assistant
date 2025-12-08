@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+
 from src.api import SemanticSearchAPI
 
 app = Flask(__name__)
@@ -28,7 +29,7 @@ def get_api(llm: str = "qwen/qwen3-14b", corpus_name: str = ""):
         llm = "qwen/qwen3-14b"
     if not corpus_name or corpus_name.strip() == "":
         corpus_name = "default"
-        
+
     key = f"{llm}|{corpus_name}"
     if key not in api_instances:
         print(f"Creating API instance with LLM: {llm}, Corpus: {corpus_name}")
@@ -47,6 +48,7 @@ def get_available_models():
     """Get list of available models from LM Studio."""
     try:
         import requests
+
         # Try to fetch from LM Studio
         response = requests.get("http://localhost:1234/v1/models", timeout=5)
         if response.status_code == 200:
@@ -58,7 +60,7 @@ def get_available_models():
         # Fallback if LM Studio is not responding properly
         return jsonify({"models": [], "error": "Could not fetch models from LM Studio"})
     except Exception as e:
-        log_exception('get_available_models', e)
+        log_exception("get_available_models", e)
         # Return empty list with error message if LM Studio is not available
         return jsonify({"models": [], "error": str(e)})
 
@@ -83,6 +85,7 @@ def get_existing_combinations():
             metadata_file = project_dir / "metadata.json"
             if metadata_file.exists():
                 import json
+
                 with open(metadata_file) as f:
                     metadata = json.load(f)
                 corpus_name = metadata.get("corpus_name", "")
@@ -107,22 +110,24 @@ def get_existing_combinations():
                 # Get document count from vector DB or working files
                 doc_count = info.get("document_count", 0)
 
-                combinations.append({
-                    "corpus_name": corpus_name,
-                    "model_name": model_name,
-                    "display_name": f"{corpus_name} ({model_name})",
-                    "stages": info["stages"],
-                    "has_vector_db": info["has_vector_db"],
-                    "file_count": doc_count,
-                    "last_modified": info["last_modified"]
-                })
+                combinations.append(
+                    {
+                        "corpus_name": corpus_name,
+                        "model_name": model_name,
+                        "display_name": f"{corpus_name} ({model_name})",
+                        "stages": info["stages"],
+                        "has_vector_db": info["has_vector_db"],
+                        "file_count": doc_count,
+                        "last_modified": info["last_modified"],
+                    }
+                )
 
         # Sort by last modified time, newest first
         combinations.sort(key=lambda x: x["last_modified"], reverse=True)
 
         return jsonify({"combinations": combinations})
     except Exception as e:
-        log_exception('get_existing_combinations', e)
+        log_exception("get_existing_combinations", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -155,6 +160,7 @@ def upload_files():
         if file and file.filename and file.filename.lower().endswith(".pdf"):
             # Use the unified sanitization function
             from src.project_manager import sanitize_filename
+
             filename = sanitize_filename(file.filename)
             filepath = upload_dir / filename
 
@@ -175,11 +181,7 @@ def upload_files():
     message = ", ".join(message_parts) if message_parts else "No new files to upload"
 
     return jsonify(
-        {
-            "message": message,
-            "files": uploaded_files,
-            "skipped": skipped_files
-        }
+        {"message": message, "files": uploaded_files, "skipped": skipped_files}
     )
 
 
@@ -245,15 +247,19 @@ def save_extracted_texts():
 
         print(f"[save-extracted-texts] Successfully saved {len(saved_files)} files")
         if reembedded_files:
-            print(f"[save-extracted-texts] Re-embedded {len(reembedded_files)} documents")
+            print(
+                f"[save-extracted-texts] Re-embedded {len(reembedded_files)} documents"
+            )
 
-        return jsonify({
-            "message": ", ".join(message_parts),
-            "files": saved_files,
-            "reembedded": reembedded_files
-        })
+        return jsonify(
+            {
+                "message": ", ".join(message_parts),
+                "files": saved_files,
+                "reembedded": reembedded_files,
+            }
+        )
     except Exception as e:
-        log_exception('save_extracted_texts', e)
+        log_exception("save_extracted_texts", e)
         print(f"[save-extracted-texts] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -269,12 +275,17 @@ def extract_documents():
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        result = api.extract_documents(verbose=False, chunk_size=chunk_size, overlap=overlap)
+        result = api.extract_documents(
+            verbose=False, chunk_size=chunk_size, overlap=overlap
+        )
         return jsonify(
-            {"message": "Documents extracted and vector database built successfully", "files": result}
+            {
+                "message": "Documents extracted and vector database built successfully",
+                "files": result,
+            }
         )
     except Exception as e:
-        log_exception('extract_documents', e)
+        log_exception("extract_documents", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -289,11 +300,9 @@ def sample_documents():
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         result = api.sample_documents(n_tokens=n_tokens, verbose=False)
-        return jsonify(
-            {"message": "Documents sampled successfully", "content": result}
-        )
+        return jsonify({"message": "Documents sampled successfully", "content": result})
     except Exception as e:
-        log_exception('sample_documents', e)
+        log_exception("sample_documents", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -317,7 +326,7 @@ def process_documents():
             {"message": "Documents processed successfully", "content": result}
         )
     except Exception as e:
-        log_exception('process_documents', e)
+        log_exception("process_documents", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -336,7 +345,7 @@ def compress_documents():
             {"message": "Documents compressed successfully", "content": result}
         )
     except Exception as e:
-        log_exception('compress_documents', e)
+        log_exception("compress_documents", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -362,21 +371,18 @@ def compress_documents_stream():
                     yield f"data: {chunk}\n\n"
                 yield "data: [DONE]\n\n"
             except Exception as e:
-                log_exception('compress_documents_stream', e)
+                log_exception("compress_documents_stream", e)
                 yield f"data: [ERROR] {str(e)}\n\n"
 
-        response = app.response_class(
-            generate(),
-            mimetype='text/event-stream'
-        )
-        response.headers['Cache-Control'] = 'no-cache'
-        response.headers['X-Accel-Buffering'] = 'no'
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response = app.response_class(generate(), mimetype="text/event-stream")
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["X-Accel-Buffering"] = "no"
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
         return response
     except Exception as e:
-        log_exception('compress_documents_stream', e)
+        log_exception("compress_documents_stream", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -397,7 +403,7 @@ def update_description():
             f.write(data["description"])
         return jsonify({"message": "Description updated successfully"})
     except Exception as e:
-        log_exception('update_description', e)
+        log_exception("update_description", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -406,14 +412,14 @@ def get_description():
     """Get the current document corpus description."""
     llm = request.args.get("llm", "qwen/qwen3-14b")
     corpus_name = request.args.get("corpus_name", "")
-    
+
     print(f"GET /api/get-description - LLM: '{llm}', Corpus: '{corpus_name}'")
-    
+
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         doc_report_file = api._get_output_dir() / "doc_report.txt"
         print(f"Looking for file at: {doc_report_file}")
-        
+
         if doc_report_file.exists():
             with open(doc_report_file, "r") as f:
                 content = f.read()
@@ -421,7 +427,7 @@ def get_description():
         else:
             return jsonify({"content": ""})
     except Exception as e:
-        log_exception('get_description', e)
+        log_exception("get_description", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -440,7 +446,7 @@ def generate_search_plans():
             {"message": "Search plans generated successfully", "plans": plans}
         )
     except Exception as e:
-        log_exception('generate_search_plans', e)
+        log_exception("generate_search_plans", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -449,7 +455,7 @@ def get_search_plans():
     """Get existing search plans."""
     llm = request.args.get("llm", "qwen/qwen3-14b")
     corpus_name = request.args.get("corpus_name", "")
-    
+
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         output_dir = api._get_output_dir()
@@ -465,7 +471,7 @@ def get_search_plans():
 
         return jsonify({"plans": plans})
     except Exception as e:
-        log_exception('get_search_plans', e)
+        log_exception("get_search_plans", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -486,7 +492,7 @@ def update_search_plan():
             f.write(data["content"])
         return jsonify({"message": "Search plan updated successfully"})
     except Exception as e:
-        log_exception('update_search_plan', e)
+        log_exception("update_search_plan", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -505,7 +511,7 @@ def execute_search_plans():
             {"message": f"Generated {len(reports)} reports", "reports": reports}
         )
     except Exception as e:
-        log_exception('execute_search_plans', e)
+        log_exception("execute_search_plans", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -514,7 +520,7 @@ def get_reports():
     """Get existing search reports."""
     llm = request.args.get("llm", "qwen/qwen3-14b")
     corpus_name = request.args.get("corpus_name", "")
-    
+
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         output_dir = api._get_output_dir()
@@ -534,7 +540,7 @@ def get_reports():
 
         return jsonify({"reports": reports})
     except Exception as e:
-        log_exception('get_reports', e)
+        log_exception("get_reports", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -555,7 +561,7 @@ def update_report():
             f.write(data["content"])
         return jsonify({"message": "Report updated successfully"})
     except Exception as e:
-        log_exception('update_report', e)
+        log_exception("update_report", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -573,39 +579,41 @@ def regenerate_report():
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         output_dir = api._get_output_dir()
-        
+
         # Find the corresponding search plan file
         # report_id format: "report_search_plan_X"
         # search plan format: "search_plan_X"
         plan_number = report_id.replace("report_search_plan_", "")
         plan_file = output_dir / f"search_plan_{plan_number}.txt"
-        
+
         if not plan_file.exists():
-            return jsonify({"error": f"Search plan file not found: {plan_file.name}"}), 404
-        
+            return jsonify(
+                {"error": f"Search plan file not found: {plan_file.name}"}
+            ), 404
+
         # Read the search plan
         with open(plan_file, "r") as f:
             search_plan_text = f.read()
-        
+
         # Initialize search agent if needed
         if api.search_agent is None:
             from src.search import SearchAgent
+
             api.search_agent = SearchAgent(api.vector_db, api.client, build_db=False)
-        
+
         # Execute the search plan to regenerate the report
         new_report = api.search_agent.execute_search_plan(search_plan_text, model=llm)
-        
+
         # Save the regenerated report
         report_file = output_dir / f"{report_id}.txt"
         with open(report_file, "w") as f:
             f.write(new_report)
-        
-        return jsonify({
-            "message": "Report regenerated successfully",
-            "content": new_report
-        })
+
+        return jsonify(
+            {"message": "Report regenerated successfully", "content": new_report}
+        )
     except Exception as e:
-        log_exception('regenerate_report', e)
+        log_exception("regenerate_report", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -621,12 +629,16 @@ def synthesize_final_report():
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        final_report, evaluation_metadata = api.evaluate_and_synthesize(data["user_query"])
-        return jsonify({
-            "message": "Final report generated successfully",
-            "content": final_report,
-            "evaluation": evaluation_metadata
-        })
+        final_report, evaluation_metadata = api.evaluate_and_synthesize(
+            data["user_query"]
+        )
+        return jsonify(
+            {
+                "message": "Final report generated successfully",
+                "content": final_report,
+                "evaluation": evaluation_metadata,
+            }
+        )
     except FileNotFoundError as e:
         print(f"[synthesize-final-report] File not found: {str(e)}")
         return jsonify({"error": f"File not found: {str(e)}"}), 500
@@ -634,7 +646,7 @@ def synthesize_final_report():
         print(f"[synthesize-final-report] Validation error: {str(e)}")
         return jsonify({"error": str(e)}), 400
     except Exception as e:
-        log_exception('synthesize_final_report', e)
+        log_exception("synthesize_final_report", e)
         print(f"[synthesize-final-report] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -644,7 +656,7 @@ def get_final_report():
     """Get the final synthesized report."""
     llm = request.args.get("llm", "qwen/qwen3-14b")
     corpus_name = request.args.get("corpus_name", "")
-    
+
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
         final_report_file = api._get_output_dir() / "final_report.md"
@@ -655,7 +667,7 @@ def get_final_report():
         else:
             return jsonify({"content": ""})
     except Exception as e:
-        log_exception('get_final_report', e)
+        log_exception("get_final_report", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -676,7 +688,7 @@ def update_final_report():
             f.write(data["content"])
         return jsonify({"message": "Final report updated successfully"})
     except Exception as e:
-        log_exception('update_final_report', e)
+        log_exception("update_final_report", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -696,7 +708,7 @@ def build_vector_database():
             {"message": "Vector database built successfully", "stats": stats}
         )
     except Exception as e:
-        log_exception('build_vector_database', e)
+        log_exception("build_vector_database", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -711,7 +723,7 @@ def database_stats():
         stats = api.get_database_stats()
         return jsonify(stats)
     except Exception as e:
-        log_exception('database_stats', e)
+        log_exception("database_stats", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -730,7 +742,7 @@ def cleanup_working_files():
         api.cleanup_working_files()
         return jsonify({"message": "Working files cleaned up successfully"})
     except Exception as e:
-        log_exception('cleanup_working_files', e)
+        log_exception("cleanup_working_files", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -745,7 +757,7 @@ def get_embedded_documents():
         documents = api.get_all_embedded_documents()
         return jsonify({"documents": documents})
     except Exception as e:
-        log_exception('get_embedded_documents', e)
+        log_exception("get_embedded_documents", e)
         print(f"[get-embedded-documents] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -761,7 +773,7 @@ def get_uploaded_documents():
         documents = api.get_uploaded_documents()
         return jsonify({"documents": documents})
     except Exception as e:
-        log_exception('get_uploaded_documents', e)
+        log_exception("get_uploaded_documents", e)
         print(f"[get-uploaded-documents] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -780,14 +792,16 @@ def delete_embedded_document():
 
     try:
         api = get_api(llm=llm, corpus_name=corpus_name)
-        success = api.delete_embedded_document(filename, delete_source_files=delete_source_files)
+        success = api.delete_embedded_document(
+            filename, delete_source_files=delete_source_files
+        )
 
         if success:
             return jsonify({"message": f"Deleted document: {filename}"})
         else:
             return jsonify({"error": f"Document not found: {filename}"}), 404
     except Exception as e:
-        log_exception('delete_embedded_document', e)
+        log_exception("delete_embedded_document", e)
         print(f"[delete-embedded-document] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -812,7 +826,7 @@ def delete_uploaded_document():
         else:
             return jsonify({"error": f"Uploaded document not found: {filename}"}), 404
     except Exception as e:
-        log_exception('delete_uploaded_document', e)
+        log_exception("delete_uploaded_document", e)
         print(f"[delete-uploaded-document] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
@@ -838,19 +852,21 @@ def create_project():
         # Get project info to return
         info = pm.get_project_info()
 
-        return jsonify({
-            "message": f"Project '{corpus_name}' created successfully",
-            "project": {
-                "corpus_name": corpus_name,
-                "model_name": llm,
-                "display_name": f"{corpus_name} ({llm})",
-                "stages": info["stages"],
-                "file_count": 0,
-                "last_modified": info["last_modified"]
+        return jsonify(
+            {
+                "message": f"Project '{corpus_name}' created successfully",
+                "project": {
+                    "corpus_name": corpus_name,
+                    "model_name": llm,
+                    "display_name": f"{corpus_name} ({llm})",
+                    "stages": info["stages"],
+                    "file_count": 0,
+                    "last_modified": info["last_modified"],
+                },
             }
-        })
+        )
     except Exception as e:
-        log_exception('create_project', e)
+        log_exception("create_project", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -879,7 +895,7 @@ def delete_project():
 
         return jsonify({"message": f"Project '{corpus_name}' deleted successfully"})
     except Exception as e:
-        log_exception('delete_project', e)
+        log_exception("delete_project", e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -901,7 +917,7 @@ def get_citation_source(citation_key):
         else:
             return jsonify({"error": f"Citation not found: {citation_key}"}), 404
     except Exception as e:
-        log_exception('get_citation_source', e)
+        log_exception("get_citation_source", e)
         print(f"[get-citation-source] ERROR: {str(e)}")
         return jsonify({"error": str(e)}), 500
 

@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""
-Script to extract text from PDF files, sample tokens, and output to a single file.
-"""
-
-import argparse
 import sys
 from pathlib import Path
 
@@ -175,7 +170,7 @@ def sample_from_txt_files(data_dir, n_tokens, token_budget=None, verbose=True):
         # Read text
         with open(txt_file, "r", encoding="utf-8") as f:
             text = f.read()
-        
+
         if not text.strip():
             if verbose:
                 print(f"Warning: No text in {txt_file.name}")
@@ -264,12 +259,12 @@ def process_pdfs_and_sample(
 
     for pdf_file in sorted(pdf_files):
         txt_file = pdf_file.with_suffix(".txt")
-        
+
         # Check if txt file already exists
         if txt_file.exists():
             if verbose:
                 print(f"Skipping {pdf_file.name} - txt file already exists")
-            
+
             # Read existing txt file for sampling
             with open(txt_file, "r", encoding="utf-8") as f:
                 text = f.read()
@@ -322,55 +317,3 @@ def process_pdfs_and_sample(
         print(f"Tokens in combined text: {count_tokens(combined_text)}")
 
     return combined_text
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Extract and sample text from PDFs")
-    parser.add_argument(
-        "--token-budget",
-        type=int,
-        required=True,
-        help="Total token budget for all documents",
-    )
-    parser.add_argument(
-        "--n-tokens",
-        type=int,
-        required=True,
-        help="Number of tokens to sample from each document",
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=str,
-        default="data",
-        help="Directory containing PDF files (default: data)",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="sampled_texts.txt",
-        help="Output file name (default: sampled_texts.txt)",
-    )
-
-    args = parser.parse_args()
-
-    # Use the new function
-    combined_text = process_pdfs_and_sample(
-        data_dir=args.data_dir,
-        n_tokens=args.n_tokens,
-        token_budget=args.token_budget,
-        save_txt_files=True,
-        verbose=True,
-    )
-
-    if combined_text:
-        # Write combined output
-        with open(args.output, "w", encoding="utf-8") as f:
-            f.write(combined_text)
-        print(f"Output written to: {args.output}")
-        return 0
-    else:
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

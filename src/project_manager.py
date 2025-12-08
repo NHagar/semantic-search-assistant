@@ -5,8 +5,8 @@ This module provides a clean interface for managing project-specific directories
 and file operations, ensuring proper isolation between projects.
 """
 
-from pathlib import Path
 import shutil
+from pathlib import Path
 from typing import Dict, List
 
 
@@ -52,6 +52,7 @@ def sanitize_filename(filename: str) -> str:
 
     # Collapse multiple consecutive underscores into one
     import re
+
     sanitized = re.sub(r"_+", "_", sanitized)
 
     # Remove leading/trailing underscores
@@ -225,7 +226,7 @@ class ProjectManager:
             "description": (self.outputs_dir / "doc_report.txt").exists(),
             "plans": len(list(self.outputs_dir.glob("search_plan_*.txt"))) > 0,
             "reports": len(list(self.outputs_dir.glob("report_search_plan_*.txt"))) > 0,
-            "final": (self.outputs_dir / "final_report.md").exists()
+            "final": (self.outputs_dir / "final_report.md").exists(),
         }
 
     def delete_project(self) -> None:
@@ -260,7 +261,7 @@ class ProjectManager:
             "document_count": self.get_document_count(),
             "stages": stages,
             "last_modified": last_modified,
-            "exists": self.project_dir.exists()
+            "exists": self.project_dir.exists(),
         }
 
     @staticmethod
@@ -307,7 +308,9 @@ class ProjectManager:
         return projects
 
     @staticmethod
-    def create_metadata_file(corpus_name: str, model_name: str, base_dir: str = "projects") -> None:
+    def create_metadata_file(
+        corpus_name: str, model_name: str, base_dir: str = "projects"
+    ) -> None:
         """
         Create a metadata file to store original corpus and model names.
         This helps with reconstruction when names contain special characters.
@@ -315,12 +318,10 @@ class ProjectManager:
         pm = ProjectManager(corpus_name, model_name, base_dir)
         pm.ensure_directories()
 
-        metadata = {
-            "corpus_name": corpus_name,
-            "model_name": model_name
-        }
+        metadata = {"corpus_name": corpus_name, "model_name": model_name}
 
         metadata_path = pm.project_dir / "metadata.json"
         import json
+
         with open(metadata_path, "w") as f:
             json.dump(metadata, f, indent=2)

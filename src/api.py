@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
+
 from src.project_manager import sanitize_filename
 
 from .extract_and_sample_pdfs import (
@@ -95,7 +96,7 @@ class SemanticSearchAPI:
         self.vector_db = VectorDB(
             corpus_name=self.corpus_name,
             model_name=model,
-            project_manager=self.project_manager
+            project_manager=self.project_manager,
         )
         self.search_agent = None
 
@@ -107,7 +108,9 @@ class SemanticSearchAPI:
         """Clean up temporary working files after processing is complete."""
         self.project_manager.cleanup_working_directory()
 
-    def extract_documents(self, verbose: bool = True, chunk_size: int = 1024, overlap: int = 20) -> List[Dict[str, Any]]:
+    def extract_documents(
+        self, verbose: bool = True, chunk_size: int = 1024, overlap: int = 20
+    ) -> List[Dict[str, Any]]:
         """
         Extract text from PDF documents to txt files and build vector database.
 
@@ -123,7 +126,7 @@ class SemanticSearchAPI:
         result = extract_pdfs_to_txt(
             data_dir=self.pdfs_dir,
             output_dir=self.data_dir,  # txt_dir
-            verbose=verbose
+            verbose=verbose,
         )
 
         # Build/update vector database after extraction
@@ -411,7 +414,9 @@ class SemanticSearchAPI:
                     if plan_file.exists():
                         plan_files.append(plan_file)
                     else:
-                        print(f"Warning: Plan file {plan_id}.txt not found, skipping...")
+                        print(
+                            f"Warning: Plan file {plan_id}.txt not found, skipping..."
+                        )
             else:
                 plan_files = all_plan_files
         else:
@@ -488,7 +493,9 @@ class SemanticSearchAPI:
             # Format: "report_search_plan_X.txt"
             report_name = report.name
             if report_name.startswith("report_search_plan_"):
-                plan_num = report_name.replace("report_search_plan_", "").replace(".txt", "")
+                plan_num = report_name.replace("report_search_plan_", "").replace(
+                    ".txt", ""
+                )
                 plan_file = f"search_plan_{plan_num}.txt"
                 plan_to_report[plan_file] = report
 
@@ -503,16 +510,20 @@ class SemanticSearchAPI:
         for idx, plan in enumerate(plans):
             # Check if this plan has a corresponding report
             if plan.name not in plan_to_report:
-                print(f"[evaluate_and_synthesize] Warning: No report found for {plan.name}, skipping.")
-                report_evaluations.append({
-                    "report_index": idx,
-                    "report_filename": None,
-                    "plan_filename": plan.name,
-                    "status": "error",
-                    "reason": "No report generated for this plan",
-                    "is_relevant": False,
-                    "is_thorough": False,
-                })
+                print(
+                    f"[evaluate_and_synthesize] Warning: No report found for {plan.name}, skipping."
+                )
+                report_evaluations.append(
+                    {
+                        "report_index": idx,
+                        "report_filename": None,
+                        "plan_filename": plan.name,
+                        "status": "error",
+                        "reason": "No report generated for this plan",
+                        "is_relevant": False,
+                        "is_thorough": False,
+                    }
+                )
                 continue
 
             report = plan_to_report[plan.name]
@@ -565,15 +576,17 @@ class SemanticSearchAPI:
                     "[evaluate_and_synthesize] Warning: Empty response from LLM during "
                     "evaluation; skipping report."
                 )
-                report_evaluations.append({
-                    "report_index": idx,
-                    "report_filename": report.name,
-                    "plan_filename": plan.name,
-                    "status": "error",
-                    "reason": "Empty response from LLM",
-                    "is_relevant": False,
-                    "is_thorough": False,
-                })
+                report_evaluations.append(
+                    {
+                        "report_index": idx,
+                        "report_filename": report.name,
+                        "plan_filename": plan.name,
+                        "status": "error",
+                        "reason": "Empty response from LLM",
+                        "is_relevant": False,
+                        "is_thorough": False,
+                    }
+                )
                 continue
 
             cleaned_content = _strip_fences(content)
@@ -584,15 +597,17 @@ class SemanticSearchAPI:
                     "[evaluate_and_synthesize] Warning: Could not decode evaluation "
                     f"response as JSON: {exc}. Raw content: {cleaned_content!r}"
                 )
-                report_evaluations.append({
-                    "report_index": idx,
-                    "report_filename": report.name,
-                    "plan_filename": plan.name,
-                    "status": "error",
-                    "reason": f"JSON decode error: {str(exc)}",
-                    "is_relevant": False,
-                    "is_thorough": False,
-                })
+                report_evaluations.append(
+                    {
+                        "report_index": idx,
+                        "report_filename": report.name,
+                        "plan_filename": plan.name,
+                        "status": "error",
+                        "reason": f"JSON decode error: {str(exc)}",
+                        "is_relevant": False,
+                        "is_thorough": False,
+                    }
+                )
                 continue
 
             try:
@@ -602,28 +617,34 @@ class SemanticSearchAPI:
                     "[evaluate_and_synthesize] Warning: Evaluation response failed "
                     f"validation: {exc}. Raw content: {cleaned_content!r}"
                 )
-                report_evaluations.append({
-                    "report_index": idx,
-                    "report_filename": report.name,
-                    "plan_filename": plan.name,
-                    "status": "error",
-                    "reason": f"Validation error: {str(exc)}",
-                    "is_relevant": False,
-                    "is_thorough": False,
-                })
+                report_evaluations.append(
+                    {
+                        "report_index": idx,
+                        "report_filename": report.name,
+                        "plan_filename": plan.name,
+                        "status": "error",
+                        "reason": f"Validation error: {str(exc)}",
+                        "is_relevant": False,
+                        "is_thorough": False,
+                    }
+                )
                 continue
 
             # Track evaluation result
             passed = report_evaluation.is_relevant and report_evaluation.is_thorough
-            report_evaluations.append({
-                "report_index": idx,
-                "report_filename": report.name,
-                "plan_filename": plan.name,
-                "status": "used" if passed else "discarded",
-                "reason": report_evaluation.reasoning if hasattr(report_evaluation, 'reasoning') else "",
-                "is_relevant": report_evaluation.is_relevant,
-                "is_thorough": report_evaluation.is_thorough,
-            })
+            report_evaluations.append(
+                {
+                    "report_index": idx,
+                    "report_filename": report.name,
+                    "plan_filename": plan.name,
+                    "status": "used" if passed else "discarded",
+                    "reason": report_evaluation.reasoning
+                    if hasattr(report_evaluation, "reasoning")
+                    else "",
+                    "is_relevant": report_evaluation.is_relevant,
+                    "is_thorough": report_evaluation.is_thorough,
+                }
+            )
 
             if passed:
                 passed_reports.append(report_content)
@@ -677,9 +698,17 @@ class SemanticSearchAPI:
         # Prepare evaluation metadata
         evaluation_metadata = {
             "total_reports": len(report_evaluations),
-            "reports_used": sum(1 for e in report_evaluations if e["status"] in ["used", "used_fallback"]),
-            "reports_discarded": sum(1 for e in report_evaluations if e["status"] == "discarded"),
-            "reports_error": sum(1 for e in report_evaluations if e["status"] == "error"),
+            "reports_used": sum(
+                1
+                for e in report_evaluations
+                if e["status"] in ["used", "used_fallback"]
+            ),
+            "reports_discarded": sum(
+                1 for e in report_evaluations if e["status"] == "discarded"
+            ),
+            "reports_error": sum(
+                1 for e in report_evaluations if e["status"] == "error"
+            ),
             "fallback_used": fallback_used,
             "report_evaluations": report_evaluations,
         }
@@ -793,7 +822,9 @@ class SemanticSearchAPI:
         if not sanitized_filename.lower().endswith(".pdf"):
             sanitized_filename = f"{sanitized_filename}.pdf"
 
-        available_pdfs = {pdf_path.name for pdf_path in self.project_manager.list_pdfs()}
+        available_pdfs = {
+            pdf_path.name for pdf_path in self.project_manager.list_pdfs()
+        }
         if sanitized_filename not in available_pdfs:
             return False
 
@@ -810,7 +841,9 @@ class SemanticSearchAPI:
 
         return deleted
 
-    def delete_embedded_document(self, filename: str, delete_source_files: bool = True) -> bool:
+    def delete_embedded_document(
+        self, filename: str, delete_source_files: bool = True
+    ) -> bool:
         """Delete a document from the vector database and optionally remove source files.
 
         Args:
@@ -820,9 +853,13 @@ class SemanticSearchAPI:
         Returns:
             True if successful, False otherwise
         """
-        return self.vector_db.delete_document(filename, delete_source_files=delete_source_files)
+        return self.vector_db.delete_document(
+            filename, delete_source_files=delete_source_files
+        )
 
-    def build_vector_database(self, chunk_size: int = 1024, overlap: int = 20) -> Dict[str, Any]:
+    def build_vector_database(
+        self, chunk_size: int = 1024, overlap: int = 20
+    ) -> Dict[str, Any]:
         """
         Build or update the vector database from existing txt files.
 
