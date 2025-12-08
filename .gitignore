@@ -2,22 +2,31 @@
 __pycache__/
 *.py[oc]
 build/
-dist/
 wheels/
 *.egg-info
 
 # Virtual environments
 .venv
 
+# Data directories
 data/
 chroma_db/
 chroma_dbs/
-*.txt
-final_report.md
+projects/
+annotations/
 swamp_chronicles/
 
-annotations/
+# Output files
+final_report.md
 
+# Node.js
+node_modules/
+dist/
+models/
+
+# OS files
 .DS_Store
 
-projects/
+# Environment
+.env
+.env.local
