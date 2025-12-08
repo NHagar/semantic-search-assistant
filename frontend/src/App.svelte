@@ -8,6 +8,10 @@
     projectSelected,
     currentProject,
     selectedPlanIds,
+    processedDocuments,
+    documentDescription,
+    searchPlans,
+    reports,
   } from "./lib/stores.js";
   import { apiService } from "./lib/api.js";
 
@@ -25,6 +29,10 @@
   let apiHealthy = false;
   let hasProjectSelected = false;
   let project = null;
+  let hasDocuments = false;
+  let hasDescription = false;
+  let hasPlans = false;
+  let hasReports = false;
 
   // Subscribe to store changes
   currentStep.subscribe((value) => {
@@ -45,6 +53,22 @@
 
   currentProject.subscribe((value) => {
     project = value;
+  });
+
+  processedDocuments.subscribe((value) => {
+    hasDocuments = !!value && value.length > 0;
+  });
+
+  documentDescription.subscribe((value) => {
+    hasDescription = !!value && value.length > 0;
+  });
+
+  searchPlans.subscribe((value) => {
+    hasPlans = !!value && value.length > 0;
+  });
+
+  reports.subscribe((value) => {
+    hasReports = !!value && value.length > 0;
   });
 
   onMount(async () => {
@@ -269,6 +293,11 @@
           <p>Upload PDF documents, review and edit extracted text, then embed them for semantic search.</p>
 
           <DocumentUploadEditor on:extracted={handleDocumentsExtracted} />
+          <div class="navigation-buttons">
+            <button class="nav-btn primary" disabled={!hasDocuments} on:click={nextStep}
+              >Next</button
+            >
+          </div>
         </div>
       {:else if currentStepValue === 1}
         <div class="step-panel">
@@ -282,8 +311,9 @@
             on:saved={handleDescriptionSaved}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}
-              >Previous</button
+            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn primary" disabled={!hasDescription} on:click={nextStep}
+              >Next</button
             >
           </div>
         </div>
@@ -299,8 +329,9 @@
             on:execute={handleExecutePlans}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}
-              >Previous</button
+            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn primary" disabled={!hasPlans} on:click={nextStep}
+              >Next</button
             >
           </div>
         </div>
@@ -315,8 +346,9 @@
             on:review={handleReviewReports}
           />
           <div class="navigation-buttons">
-            <button class="nav-btn secondary" on:click={prevStep}
-              >Previous</button
+            <button class="nav-btn secondary" on:click={prevStep}>Previous</button>
+            <button class="nav-btn primary" disabled={!hasReports} on:click={nextStep}
+              >Next</button
             >
           </div>
         </div>
@@ -577,6 +609,12 @@
 
   .nav-btn.secondary:hover {
     background: #5a6268;
+  }
+
+  .nav-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.7;
   }
 
   @media (max-width: 768px) {
