@@ -1,0 +1,78 @@
+{
+    "project_name": "climate-legal-docs",
+    "model_text": "openai/gpt-oss-20b",
+    "model_embedding": "BAAI/bge-small-en-v1.5",
+    "chroma_database_path": "",
+    "corpus_synopsis": "A collection of legal documents and resources related to climate change, environmental regulations, and sustainability initiatives.",
+    "search_plans": [
+        {
+            "plan_name": "climate_change_solutions",
+            "main_objective": "Identify and summarize key legal documents that propose solutions to climate change.",
+            "selected": false
+        },
+        {
+            "plan_name": "environmental_regulations_analysis",
+            "main_objective": "Analyze and categorize environmental regulations based on their impact on various industries.",
+            "selected": true
+        }
+    ],
+    "search_reports": [
+        {
+            "plan_name": "environmental_regulations_analysis",
+            "report_contents": "This report provides an in-depth analysis of environmental regulations affecting industries such as energy, manufacturing, and agriculture. It categorizes regulations based on their stringency, compliance requirements, and potential economic impact. Key findings include the identification of trends in regulatory approaches and recommendations for businesses to adapt to evolving legal landscapes.",
+            "documents_cited": [
+                "doc_001",
+                "doc_023",
+                "doc_045"
+            ],
+            "searches_conducted": [
+                {
+                    "query": "environmental regulations impact on energy sector",
+                    "docs_returned": [
+                        "doc_001",
+                        "doc_015",
+                        "doc_022"
+                    ]
+                },
+                {
+                    "query": "compliance requirements for manufacturing industry",
+                    "docs_returned": [
+                        "doc_023",
+                        "doc_034",
+                        "doc_045"
+                    ]
+                }
+            ],
+            "passed_evaluation": true
+        },
+        {
+            "plan_name": "climate_change_solutions",
+            "report_contents": "This report summarizes key legal documents that propose various solutions to combat climate change. It highlights legislative measures, international agreements, and policy recommendations aimed at reducing carbon emissions and promoting sustainable practices. The report also discusses the effectiveness of these solutions and their implementation challenges.",
+            "documents_cited": [
+                "doc_010",
+                "doc_032",
+                "doc_047"
+            ],
+            "searches_conducted": [
+                {
+                    "query": "legal solutions for climate change mitigation",
+                    "docs_returned": [
+                        "doc_010",
+                        "doc_018",
+                        "doc_029"
+                    ]
+                },
+                {
+                    "query": "international agreements on climate action",
+                    "docs_returned": [
+                        "doc_032",
+                        "doc_040",
+                        "doc_047"
+                    ]
+                }
+            ],
+            "passed_evaluation": false
+        }
+    ],
+    "final_report": "After conducting a comprehensive analysis of environmental regulations and proposed solutions to climate change, this report highlights the critical legal frameworks shaping the global response to environmental challenges. The analysis of environmental regulations reveals significant impacts on various industries, emphasizing the need for adaptive strategies to ensure compliance and sustainability. Furthermore, the exploration of legal solutions for climate change underscores the importance of robust legislative measures and international cooperation in mitigating environmental risks. Key recommendations include enhancing regulatory clarity, fostering innovation in sustainable practices, and strengthening global partnerships to address climate change effectively."
+}
