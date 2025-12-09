@@ -1,9 +1,13 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { mkdir, writeFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join, parse } from 'path';
 import { getDb } from '../db/client.js';
 import { generateId } from '../utils/id.js';
 import { config } from '../config/index.js';
-import type { Project, CreateProjectInput, UpdateProjectInput } from '../types/index.js';
+import { sanitizeFilename } from '../utils/sanitize.js';
+import type { Project, CreateProjectInput, UpdateProjectInput, UploadedFile } from '../types/index.js';
 
 const app = new Hono();
 
@@ -36,32 +40,109 @@ app.get('/', (c) => {
 });
 
 // Create project
+// Create project
 app.post('/', async (c) => {
-  const body = await c.req.json();
-  const parsed = createProjectSchema.safeParse(body);
+  const contentType = c.req.header('content-type') || '';
 
-  if (!parsed.success) {
-    return c.json({ success: false, error: parsed.error.message }, 400);
-  }
+  if (contentType.includes('multipart/form-data')) {
+    const formData = await c.req.formData();
+    const files = formData.getAll('files') as File[]; // Accepts 'files' or 'file'? checks below
 
-  const db = getDb();
-  const id = generateId('proj');
-  const { project_name, model_text, model_embedding } = parsed.data;
+    // If 'files' is empty, maybe they sent 'file'?
+    // But frontend usually sends 'files' if we set it so. The plan says "files".
+    // Let's support both just in case or just stick to 'files'.
+    // The previous frontend code sent 'file'. I will update frontend to send 'files'.
+    // But let's be robust. 
 
-  try {
-    db.prepare(`
-      INSERT INTO projects (id, project_name, model_text, model_embedding)
-      VALUES (?, ?, ?, ?)
-    `).run(id, project_name, model_text, model_embedding);
+    const validFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
 
-    const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id) as Project;
-
-    return c.json({ success: true, data: project }, 201);
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
-      return c.json({ success: false, error: 'Project name already exists' }, 409);
+    if (validFiles.length === 0) {
+      return c.json({ success: false, error: 'No PDF files provided' }, 400);
     }
-    throw error;
+
+    const db = getDb();
+    const id = generateId('proj');
+    // Derive project name from first file
+    const firstFile = validFiles[0];
+    const projectName = parse(firstFile.name).name; // name without extension
+
+    const model_text = config.DEFAULT_MODEL;
+    const model_embedding = config.EMBEDDING_MODEL;
+
+    try {
+      // 1. Create Project
+      db.prepare(`
+        INSERT INTO projects (id, project_name, model_text, model_embedding)
+        VALUES (?, ?, ?, ?)
+      `).run(id, projectName, model_text, model_embedding);
+
+      // 2. Save Files
+      const uploadDir = join(config.UPLOADS_PATH, id);
+      if (!existsSync(uploadDir)) {
+        await mkdir(uploadDir, { recursive: true });
+      }
+
+      const uploaded: UploadedFile[] = [];
+
+      for (const file of validFiles) {
+        const sanitizedName = sanitizeFilename(file.name);
+        const filePath = join(uploadDir, sanitizedName);
+        const fileId = generateId('file');
+
+        const buffer = Buffer.from(await file.arrayBuffer());
+        await writeFile(filePath, buffer);
+
+        db.prepare(`
+          INSERT INTO uploaded_files (id, project_id, filename, original_filename, file_path, file_size, mime_type)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(fileId, id, sanitizedName, file.name, filePath, file.size, file.type);
+
+        const uploadedFile = db.prepare(`SELECT * FROM uploaded_files WHERE id = ?`).get(fileId) as UploadedFile;
+        uploaded.push(uploadedFile);
+      }
+
+      const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id) as Project;
+
+      return c.json({ success: true, data: project, uploaded }, 201);
+
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
+        // If auto-generated name exists, maybe append timestamp? 
+        // For now, let's just return error, or we could make it unique. 
+        // The user can rename later.
+        return c.json({ success: false, error: 'Project with this name already exists' }, 409);
+      }
+      throw error;
+    }
+
+  } else {
+    // JSON handling
+    const body = await c.req.json();
+    const parsed = createProjectSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return c.json({ success: false, error: parsed.error.message }, 400);
+    }
+
+    const db = getDb();
+    const id = generateId('proj');
+    const { project_name, model_text, model_embedding } = parsed.data;
+
+    try {
+      db.prepare(`
+        INSERT INTO projects (id, project_name, model_text, model_embedding)
+        VALUES (?, ?, ?, ?)
+      `).run(id, project_name, model_text, model_embedding);
+
+      const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id) as Project;
+
+      return c.json({ success: true, data: project }, 201);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
+        return c.json({ success: false, error: 'Project name already exists' }, 409);
+      }
+      throw error;
+    }
   }
 });
 

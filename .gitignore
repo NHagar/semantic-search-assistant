@@ -12,7 +12,7 @@ wheels/
 data/
 chroma_db/
 chroma_dbs/
-projects/
+/projects/
 annotations/
 swamp_chronicles/
 
