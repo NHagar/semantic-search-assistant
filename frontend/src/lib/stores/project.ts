@@ -40,8 +40,11 @@ function createProjectStore() {
 
             // Ingestion
             if (stepDef.id === 'ingestion') {
-                if (backendProject.document_count > 0) status = 'completed';
-                // TODO: Check if ingestion is running? status = 'running'
+                if (backendProject.document_count > 0) {
+                    status = 'completed';
+                } else if (backendProject.uploaded_file_count > 0) {
+                    status = 'running';
+                }
             }
 
             // Synopsis

@@ -29,7 +29,11 @@ export class VectorStore {
           chunk.citationKey
         );
 
-        const chunkId = result.lastInsertRowid;
+        // better-sqlite3 returns bigint for lastInsertRowid; vec table needs a plain integer
+        const chunkId = Number(result.lastInsertRowid);
+        if (!Number.isInteger(chunkId)) {
+          throw new Error(`Invalid chunk id ${String(result.lastInsertRowid)}`);
+        }
         const embeddingBlob = new Float32Array(chunk.embedding);
         insertVec.run(chunkId, embeddingBlob);
       }

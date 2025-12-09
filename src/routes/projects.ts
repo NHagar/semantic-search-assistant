@@ -8,6 +8,7 @@ import { generateId } from '../utils/id.js';
 import { config } from '../config/index.js';
 import { sanitizeFilename } from '../utils/sanitize.js';
 import type { Project, CreateProjectInput, UpdateProjectInput, UploadedFile } from '../types/index.js';
+import { IngestionService } from '../services/ingestion.js';
 
 const app = new Hono();
 
@@ -103,6 +104,12 @@ app.post('/', async (c) => {
 
       const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(id) as Project;
 
+
+      // Trigger background processing
+      IngestionService.processProjectFiles(id).catch(err => {
+        console.error('Background ingestion failed:', err);
+      });
+
       return c.json({ success: true, data: project, uploaded }, 201);
 
     } catch (error: unknown) {
@@ -154,15 +161,39 @@ app.get('/:id', (c) => {
   const project = db.prepare(`
     SELECT p.*,
       (SELECT COUNT(*) FROM documents d WHERE d.project_id = p.id AND d.status = 'embedded') as document_count,
+      (SELECT COUNT(*) FROM uploaded_files uf WHERE uf.project_id = p.id AND uf.status = 'pending') as pending_upload_count,
+      (SELECT COUNT(*) FROM documents d WHERE d.project_id = p.id AND d.status = 'extracted') as extracted_document_count,
+      (SELECT COUNT(*) FROM documents d WHERE d.project_id = p.id AND d.status = 'error') as error_document_count,
+      (SELECT COUNT(*) FROM uploaded_files uf WHERE uf.project_id = p.id) as uploaded_file_count,
       (SELECT COUNT(*) FROM chunks c WHERE c.project_id = p.id) as chunk_count,
       (SELECT COUNT(*) FROM search_plans sp WHERE sp.project_id = p.id) as plan_count,
       (SELECT COUNT(*) FROM search_reports sr WHERE sr.project_id = p.id) as report_count
     FROM projects p
     WHERE p.id = ?
-  `).get(id);
+  `).get(id) as (Project & {
+    document_count: number;
+    pending_upload_count: number;
+    extracted_document_count: number;
+    error_document_count: number;
+    uploaded_file_count: number;
+    chunk_count: number;
+    plan_count: number;
+    report_count: number;
+  }) | undefined;
 
   if (!project) {
     return c.json({ success: false, error: 'Project not found' }, 404);
+  }
+
+  // Kick off ingestion in the background when there is pending work
+  if (
+    project.pending_upload_count > 0 ||
+    project.extracted_document_count > 0 ||
+    project.error_document_count > 0
+  ) {
+    IngestionService.processProjectFiles(id).catch(err => {
+      console.error('Background ingestion failed:', err);
+    });
   }
 
   return c.json({ success: true, data: project });

@@ -6,9 +6,17 @@
 	let isUploading = false;
 	let error: string | null = null;
 
-	async function handleUpload(e?: Event) {
-		const target = e?.target as HTMLInputElement;
-		const files = target?.files || fileInput?.files;
+	async function handleUpload(eventOrFiles?: Event | FileList) {
+		let files: FileList | null = null;
+
+		if (eventOrFiles instanceof Event) {
+			const target = eventOrFiles.target as HTMLInputElement;
+			files = target.files;
+		} else if (eventOrFiles) {
+			files = eventOrFiles as FileList;
+		} else {
+			files = fileInput?.files;
+		}
 
 		if (!files || files.length === 0) return;
 
@@ -49,10 +57,7 @@
 		e.preventDefault();
 		const files = e.dataTransfer?.files;
 		if (files && files.length > 0) {
-			if (fileInput) {
-				fileInput.files = files;
-				handleUpload();
-			}
+			handleUpload(files);
 		}
 	}
 </script>
