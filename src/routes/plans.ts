@@ -33,6 +33,11 @@ app.get('/', (c) => {
   const projectId = c.get('projectId');
   const db = getDb();
 
+  const project = db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId);
+  if (!project) {
+    return c.json({ success: false, error: 'Project not found' }, 404);
+  }
+
   const plans = db.prepare(`
     SELECT * FROM search_plans
     WHERE project_id = ?

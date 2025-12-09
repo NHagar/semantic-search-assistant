@@ -24,6 +24,10 @@ node_modules/
 dist/
 models/
 
+# Testing
+coverage/
+test.db
+
 # OS files
 .DS_Store
 

@@ -144,7 +144,7 @@ app.delete('/:id', (c) => {
   // CASCADE will handle related records
   db.prepare(`DELETE FROM projects WHERE id = ?`).run(id);
 
-  return c.json({ success: true, data: { deleted: id } });
+  return c.body(null, 204);
 });
 
 export default app;

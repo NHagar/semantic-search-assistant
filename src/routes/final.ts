@@ -24,6 +24,12 @@ app.get('/', (c) => {
   const projectId = c.get('projectId');
   const db = getDb();
 
+  // Check project exists first (even if no report)
+  const projectCheck = db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId);
+  if (!projectCheck) {
+    return c.json({ success: false, error: 'Project not found' }, 404);
+  }
+
   const project = db.prepare(`
     SELECT final_report FROM projects WHERE id = ?
   `).get(projectId) as { final_report: string | null } | undefined;

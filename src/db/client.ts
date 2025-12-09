@@ -12,12 +12,14 @@ let db: Database.Database | null = null;
 export function getDb(): Database.Database {
   if (!db) {
     // Ensure data directory exists
-    const dbDir = dirname(config.DATABASE_PATH);
+    // Prioritize process.env.DATABASE_PATH (set in tests) over config (loaded at import)
+    const dbPath = process.env.DATABASE_PATH || config.DATABASE_PATH;
+    const dbDir = dirname(dbPath);
     if (!existsSync(dbDir)) {
       mkdirSync(dbDir, { recursive: true });
     }
 
-    db = new Database(config.DATABASE_PATH);
+    db = new Database(dbPath);
 
     // Load sqlite-vec extension
     sqliteVec.load(db);
@@ -72,4 +74,23 @@ export function closeDb(): void {
 export function transaction<T>(fn: (db: Database.Database) => T): T {
   const database = getDb();
   return database.transaction(fn)(database);
+}
+
+export function resetDb(): void {
+  const database = getDb();
+  database.transaction(() => {
+    database.pragma('foreign_keys = OFF');
+    try {
+      database.prepare('DELETE FROM chunks_vec').run();
+      database.prepare('DELETE FROM search_queries').run();
+      database.prepare('DELETE FROM search_reports').run();
+      database.prepare('DELETE FROM search_plans').run();
+      database.prepare('DELETE FROM chunks').run();
+      database.prepare('DELETE FROM documents').run();
+      database.prepare('DELETE FROM uploaded_files').run();
+      database.prepare('DELETE FROM projects').run();
+    } finally {
+      database.pragma('foreign_keys = ON');
+    }
+  })();
 }

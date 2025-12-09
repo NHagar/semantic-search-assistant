@@ -47,6 +47,11 @@ app.get('/', (c) => {
 
   const db = getDb();
 
+  const project = db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId);
+  if (!project) {
+    return c.json({ success: false, error: 'Project not found' }, 404);
+  }
+
   let query = `SELECT * FROM documents WHERE project_id = ?`;
   const params: string[] = [projectId];
 
@@ -305,7 +310,7 @@ app.delete('/:docId', async (c) => {
   // Delete document
   db.prepare(`DELETE FROM documents WHERE id = ?`).run(docId);
 
-  return c.json({ success: true, data: { deleted: docId } });
+  return c.body(null, 204);
 });
 
 // Re-embed single document
