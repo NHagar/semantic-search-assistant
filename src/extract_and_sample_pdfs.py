@@ -5,15 +5,13 @@ Script to extract text from PDF files, sample tokens, and output to a single fil
 
 import os
 import tempfile
-from paddleocr import PPStructureV3, PaddleOCR, LayoutDetection
+from paddleocr import PPStructureV3
 import paddle
 import argparse
 import sys
 from pathlib import Path
 
 import PyPDF2
-from paddlex.inference.utils.pp_option import DISABLE_DEVICE_FALLBACK
-from paddlex.utils.flags import DISABLE_MODEL_SOURCE_CHECK
 import tiktoken
 
 
