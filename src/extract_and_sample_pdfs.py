@@ -5,7 +5,8 @@ Script to extract text from PDF files, sample tokens, and output to a single fil
 
 import os
 import tempfile
-from paddleocr import PaddleOCR, LayoutDetection
+from paddleocr import PPStructureV3, PaddleOCR, LayoutDetection
+import paddle
 import argparse
 import sys
 from pathlib import Path
@@ -47,20 +48,16 @@ def extract_text_from_file(file, verbose: bool = True) -> str:
 
 def extract_text_with_paddle(path: Path) -> str:
     try:
-        ocr = PaddleOCR(
-            lang="en",
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
+        device = "gpu" if paddle.device.is_compiled_with_cuda() else "cpu"
+        pipeline = PPStructureV3(
+            text_recognition_model_name="en_PP-OCRv4_mobile_rec", device=device
         )
-        result = ocr.predict(str(path))
+        result = pipeline.predict(str(path))
         text: list[str] = []
-        for page in result:
-            if not page:
+        for res in result:
+            if not res:
                 continue
-            page.print()
-            page_text = "\n".join(page.json["res"].get("rec_texts") or [])
-            text.append(page_text)
+            text.append(res.markdown["markdown_texts"])
         return "\n\n".join(text)
     except Exception as e:
         print(f"OCR failed for {path}: {e}")
