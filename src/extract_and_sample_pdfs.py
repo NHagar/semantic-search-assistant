@@ -3,15 +3,71 @@
 Script to extract text from PDF files, sample tokens, and output to a single file.
 """
 
+import os
+import tempfile
+from paddleocr import PaddleOCR, LayoutDetection
 import argparse
 import sys
 from pathlib import Path
 
 import PyPDF2
+from paddlex.inference.utils.pp_option import DISABLE_DEVICE_FALLBACK
+from paddlex.utils.flags import DISABLE_MODEL_SOURCE_CHECK
 import tiktoken
 
 
-def extract_text_from_pdf(pdf_path):
+def extract_text_from_file(file, verbose: bool = True) -> str:
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            file.save(temp_file.name)
+            temp_path = Path(temp_file.name)
+
+        text = extract_text_from_pdf(temp_path)
+
+        if not text.strip():
+            if verbose:
+                print(
+                    f"  > No text found (scanned PDF?). Running PaddleOCR on {temp_path.name}..."
+                )
+            text = extract_text_with_paddle(temp_path)
+
+        if not text.strip():
+            if verbose:
+                print(f"Warning: No text extracted from {temp_path.name}")
+
+        return text
+    except Exception as e:
+        print(f"Error extracting text from file: {e}", file=sys.stderr)
+        return ""
+    finally:
+        if temp_path and temp_path.exists():
+            os.remove(temp_path)
+
+
+def extract_text_with_paddle(path: Path) -> str:
+    try:
+        ocr = PaddleOCR(
+            lang="en",
+            use_doc_orientation_classify=False,
+            use_doc_unwarping=False,
+            use_textline_orientation=False,
+        )
+        result = ocr.predict(str(path))
+        text: list[str] = []
+        for page in result:
+            if not page:
+                continue
+            page.print()
+            page_text = "\n".join(page.json["res"].get("rec_texts") or [])
+            text.append(page_text)
+        return "\n\n".join(text)
+    except Exception as e:
+        print(f"OCR failed for {path}: {e}")
+        return ""
+
+
+def extract_text_from_pdf(pdf_path: Path):
     """Extract text from a PDF file."""
     try:
         with open(pdf_path, "rb") as file:
@@ -95,6 +151,7 @@ def extract_pdfs_to_txt(data_dir, output_dir=None, verbose=True):
 
             # Extract text
             text = extract_text_from_pdf(pdf_file)
+
             if not text.strip():
                 if verbose:
                     print(f"Warning: No text extracted from {pdf_file.name}")
@@ -175,7 +232,7 @@ def sample_from_txt_files(data_dir, n_tokens, token_budget=None, verbose=True):
         # Read text
         with open(txt_file, "r", encoding="utf-8") as f:
             text = f.read()
-        
+
         if not text.strip():
             if verbose:
                 print(f"Warning: No text in {txt_file.name}")
@@ -264,12 +321,12 @@ def process_pdfs_and_sample(
 
     for pdf_file in sorted(pdf_files):
         txt_file = pdf_file.with_suffix(".txt")
-        
+
         # Check if txt file already exists
         if txt_file.exists():
             if verbose:
                 print(f"Skipping {pdf_file.name} - txt file already exists")
-            
+
             # Read existing txt file for sampling
             with open(txt_file, "r", encoding="utf-8") as f:
                 text = f.read()

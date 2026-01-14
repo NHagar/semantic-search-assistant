@@ -24,6 +24,7 @@ class Evaluation(BaseModel):
     is_thorough: bool
     thorough_rating_reason: str
 
+
 passed_reports = []
 
 for plan, report in zip(plans, reports):
@@ -31,7 +32,12 @@ for plan, report in zip(plans, reports):
     with open(plan, "r") as f:
         plan_content = f.read()
     with open(report, "r") as f:
-        report_content = f.read().split('</think>')[1].split('=== SEARCH AGENT DEBUG LOG ===')[0].strip()
+        report_content = (
+            f.read()
+            .split("</think>")[1]
+            .split("=== SEARCH AGENT DEBUG LOG ===")[0]
+            .strip()
+        )
 
     user_input = f"""<SEARCH PLAN>
 {plan_content}
@@ -46,9 +52,9 @@ for plan, report in zip(plans, reports):
         model="qwen/qwen3-14b",
         messages=[
             {"role": "system", "content": evaluate_prompt},
-            {"role": "user", "content": user_input}
+            {"role": "user", "content": user_input},
         ],
-        response_format=Evaluation
+        response_format=Evaluation,
     )
 
     report_evaluation = json.loads(response.choices[0].message.content)
@@ -64,7 +70,7 @@ user_input = f"""<USER REQUEST>
 </USER REQUEST>
 
 <SEARCH RESULTS>
-{''.join(f"<RESULT>{report}</RESULT>" for report in passed_reports)}
+{"".join(f"<RESULT>{report}</RESULT>" for report in passed_reports)}
 </SEARCH RESULTS>
 """
 
@@ -72,7 +78,7 @@ response = client.chat.completions.create(
     model="qwen/qwen3-14b",
     messages=[
         {"role": "system", "content": synthesize_prompt},
-        {"role": "user", "content": user_input}
+        {"role": "user", "content": user_input},
     ],
 )
 

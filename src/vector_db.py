@@ -2,6 +2,7 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 import chromadb
+import torch
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer
 
@@ -327,12 +328,19 @@ class VectorDB:
 
     def embed_texts(self, texts: List[str]) -> List[float]:
         """Embed a list of texts using the SentenceTransformer."""
+        if torch.cuda.is_available():
+            device = "cuda"
+        elif torch.mps.is_available():
+            device = "mps"
+        else:
+            device = "cpu"
+
         embeddings = self.embedder.encode(
             texts,
             convert_to_tensor=True,
             batch_size=64,
             show_progress_bar=True,
-            device="mps",
+            device=device,
         )
         embeddings = F.layer_norm(embeddings, normalized_shape=(embeddings.shape[1],))
         embeddings = embeddings[:, : self.embedding_dim]

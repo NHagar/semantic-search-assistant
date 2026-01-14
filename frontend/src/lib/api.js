@@ -34,6 +34,20 @@ export const apiService = {
     return response.data;
   },
 
+  async extractRawText(file, llm = null, corpusName = null) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (llm) formData.append('llm', llm);
+    if (corpusName) formData.append('corpus_name', corpusName);
+    const response = await api.post('/extract-raw-text', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return response.data;
+  },
+
   async saveExtractedTexts(documentTexts, llm = null, corpusName = null) {
     const requestData = { document_texts: documentTexts };
     if (llm) requestData.llm = llm;
